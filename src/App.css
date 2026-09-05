@@ -206,6 +206,23 @@ input:disabled {
   margin-bottom: 0;
 }
 
+.list-count,
+.section-count {
+  color: var(--muted);
+  font: 12px 'DM Mono', monospace;
+}
+
+.search-field {
+  margin-top: 22px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.search-field input {
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, .7);
+}
+
 .page-section-group {
   margin-top: 24px;
 }
@@ -220,6 +237,43 @@ input:disabled {
   letter-spacing: .08em;
   margin: 0 0 8px;
   text-transform: uppercase;
+}
+
+.section-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px 24px;
+  align-items: center;
+  margin: 0;
+  padding: 0 0 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.section-toggle:hover {
+  border-color: transparent;
+}
+
+.section-toggle::after {
+  content: '+';
+  color: var(--muted);
+  font: 16px 'DM Mono', monospace;
+  width: 24px;
+  text-align: center;
+}
+
+.section-toggle .page-section-title {
+  margin-bottom: 0;
+}
+
+.section-toggle .section-count {
+  width: 32px;
+  text-align: right;
+}
+
+.section-toggle[aria-expanded='true']::after {
+  content: '−';
 }
 
 .page-item {

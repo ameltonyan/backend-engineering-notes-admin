@@ -100,22 +100,37 @@ function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [slugWasEdited, setSlugWasEdited] = useState(false);
+  const [pageSearch, setPageSearch] = useState("");
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const sectionSuggestions = Array.from(
     new Set(sections.map((item) => item.name).filter(Boolean)),
   ).sort();
 
+  const normalizedSearch = pageSearch.trim().toLowerCase();
+  const visiblePages = pages.filter((item) =>
+    [item.title, item.slug, item.section].some((value) =>
+      value.toLowerCase().includes(normalizedSearch),
+    ),
+  );
+
+  const sectionOrder = new Map(
+    sections.map((section, index) => [section.name, section.displayOrder ?? index]),
+  );
   const pagesBySection = Array.from(
-    pages.reduce((groups, item) => {
+    visiblePages.reduce((groups, item) => {
       const section = item.section || "Other";
       const sectionPages = groups.get(section) ?? [];
       sectionPages.push(item);
       groups.set(section, sectionPages);
       return groups;
     }, new Map<string, PageSummary[]>()),
-  ).sort(([, leftPages], [, rightPages]) =>
-    (leftPages[0]?.displayOrder ?? 0) - (rightPages[0]?.displayOrder ?? 0),
-  );
+  ).sort(([leftSection, leftPages], [rightSection, rightPages]) => {
+    const orderDifference =
+      (sectionOrder.get(leftSection) ?? leftPages[0]?.displayOrder ?? 0) -
+      (sectionOrder.get(rightSection) ?? rightPages[0]?.displayOrder ?? 0);
+    return orderDifference || leftSection.localeCompare(rightSection);
+  });
 
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
@@ -335,7 +350,10 @@ function App() {
       <div className="workspace">
         <aside className="page-list">
           <div className="list-heading">
-            <h2>Pages</h2>
+            <div>
+              <h2>Pages</h2>
+              <span className="list-count">{pages.length} total</span>
+            </div>
             <button
               type="button"
               onClick={() => {
@@ -353,25 +371,51 @@ function App() {
               New page
             </button>
           </div>
+          <label className="search-field">
+            <span>Find a page</span>
+            <input
+              type="search"
+              value={pageSearch}
+              onChange={(event) => setPageSearch(event.target.value)}
+              placeholder="Title, slug, or section"
+            />
+          </label>
           {pagesBySection.map(([section, sectionPages]) => (
             <div className="page-section-group" key={section}>
-              <h3 className="page-section-title">{section}</h3>
-              {sectionPages.map((item) => (
-                <button
-                  className={
-                    item.slug === selectedSlug ? "page-item active" : "page-item"
-                  }
-                  key={item.slug}
-                  type="button"
-                  onClick={() => setSelectedSlug(item.slug)}
-                >
-                  <strong>{item.title}</strong>
-                  <span>{item.slug}</span>
-                </button>
-              ))}
+              <button
+                className="section-toggle"
+                type="button"
+                aria-expanded={!collapsedSections[section]}
+                onClick={() =>
+                  setCollapsedSections((current) => ({
+                    ...current,
+                    [section]: !current[section],
+                  }))
+                }
+              >
+                <span className="page-section-title">{section}</span>
+                <span className="section-count">{sectionPages.length}</span>
+              </button>
+              {!collapsedSections[section] &&
+                sectionPages.map((item) => (
+                  <button
+                    className={
+                      item.slug === selectedSlug ? "page-item active" : "page-item"
+                    }
+                    key={item.slug}
+                    type="button"
+                    onClick={() => setSelectedSlug(item.slug)}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.slug}</span>
+                  </button>
+                ))}
             </div>
           ))}
           {!pages.length && <p className="muted">No pages yet.</p>}
+          {pages.length > 0 && !pagesBySection.length && (
+            <p className="muted">No pages match your search.</p>
+          )}
         </aside>
         <section className="editor">
           <div className="editor-heading">
