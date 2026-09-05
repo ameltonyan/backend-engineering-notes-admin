@@ -136,7 +136,10 @@ function App() {
   });
 
   const normalizedQuestionSearch = questionSearch.trim().toLowerCase();
-  const visibleQuestions = (page?.questions ?? []).filter((item) =>
+  const orderedQuestions = [...(page?.questions ?? [])].sort(
+    (left, right) => left.displayOrder - right.displayOrder,
+  );
+  const visibleQuestions = orderedQuestions.filter((item) =>
     [item.question, item.answer].some((value) =>
       value.toLowerCase().includes(normalizedQuestionSearch),
     ),
@@ -292,6 +295,45 @@ function App() {
     await request(`/api/admin/questions/${questionId}`, { method: "DELETE" });
     await loadPage(page.slug);
     setNotice("Question deleted");
+  };
+
+  const moveQuestion = async (questionId: number, direction: -1 | 1) => {
+    if (!page) return;
+    const currentIndex = orderedQuestions.findIndex((item) => item.id === questionId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedQuestions.length) return;
+
+    const currentQuestion = orderedQuestions[currentIndex];
+    const targetQuestion = orderedQuestions[targetIndex];
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await Promise.all([
+        request(`/api/admin/questions/${currentQuestion.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            question: currentQuestion.question,
+            answer: currentQuestion.answer,
+            displayOrder: targetQuestion.displayOrder,
+          }),
+        }),
+        request(`/api/admin/questions/${targetQuestion.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            question: targetQuestion.question,
+            answer: targetQuestion.answer,
+            displayOrder: currentQuestion.displayOrder,
+          }),
+        }),
+      ]);
+      await loadPage(page.slug);
+      setNotice("Question order saved");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const deletePage = async () => {
@@ -634,6 +676,9 @@ function App() {
               <div className="questions">
                 {visibleQuestions.map((item) => {
                   const isExpanded = Boolean(expandedQuestions[item.id]);
+                  const questionIndex = orderedQuestions.findIndex(
+                    (question) => question.id === item.id,
+                  );
                   return (
                     <article className="question" key={item.id}>
                       <button
@@ -659,6 +704,26 @@ function App() {
                         <div className="question-body">
                           <p>{item.answer}</p>
                           <div className="actions">
+                            <div className="order-actions" aria-label="Change question order">
+                              <button
+                                type="button"
+                                aria-label="Move question up"
+                                title="Move up"
+                                disabled={questionIndex === 0}
+                                onClick={() => moveQuestion(item.id, -1)}
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Move question down"
+                                title="Move down"
+                                disabled={questionIndex === orderedQuestions.length - 1}
+                                onClick={() => moveQuestion(item.id, 1)}
+                              >
+                                ↓
+                              </button>
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
