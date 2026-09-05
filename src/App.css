@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   --ink: #17221f;
@@ -17,12 +17,9 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 90% 0%, #d8e9df 0, transparent 35%), var(--paper);
+  background: radial-gradient(circle at 90% 0%, #d8e9df 0, transparent 35%), var(--paper);
   color: var(--ink);
-  font:
-    16px/1.5 "Space Grotesk",
-    sans-serif;
+  font: 16px/1.5 'Space Grotesk', sans-serif;
 }
 
 button,
@@ -66,10 +63,8 @@ button:hover {
 }
 
 .eyebrow {
-  font:
-    12px "DM Mono",
-    monospace;
-  letter-spacing: 0.08em;
+  font: 12px 'DM Mono', monospace;
+  letter-spacing: .08em;
   text-transform: uppercase;
   margin: 0 0 8px;
 }
@@ -215,9 +210,7 @@ input:disabled {
 }
 
 .page-item span {
-  font:
-    12px "DM Mono",
-    monospace;
+  font: 12px 'DM Mono', monospace;
   overflow-wrap: anywhere;
 }
 
@@ -241,10 +234,7 @@ input:disabled {
 
 .form-fields {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(
-      150px,
-      1fr
-    ) 100px;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) 100px;
   align-items: start;
   gap: 16px;
 }
@@ -317,6 +307,7 @@ input:disabled {
 }
 
 @media (max-width: 560px) {
+
   .topbar,
   .editor-heading,
   .question {
