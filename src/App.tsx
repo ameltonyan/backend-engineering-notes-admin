@@ -197,6 +197,9 @@ function App() {
 
   useEffect(() => {
     if (!credentials || !selectedSlug) return;
+    setIsQuestionFormOpen(false);
+    setEditingQuestionId(null);
+    setQuestionForm({ question: "", answer: "", displayOrder: 0 });
     loadPage(selectedSlug).catch((err: Error) => setError(err.message));
   }, [credentials, selectedSlug]);
 
