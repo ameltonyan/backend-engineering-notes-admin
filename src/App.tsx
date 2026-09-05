@@ -102,6 +102,9 @@ function App() {
   const [slugWasEdited, setSlugWasEdited] = useState(false);
   const [pageSearch, setPageSearch] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [questionSearch, setQuestionSearch] = useState("");
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
+  const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
 
   const sectionSuggestions = Array.from(
     new Set(sections.map((item) => item.name).filter(Boolean)),
@@ -131,6 +134,13 @@ function App() {
       (sectionOrder.get(rightSection) ?? rightPages[0]?.displayOrder ?? 0);
     return orderDifference || leftSection.localeCompare(rightSection);
   });
+
+  const normalizedQuestionSearch = questionSearch.trim().toLowerCase();
+  const visibleQuestions = (page?.questions ?? []).filter((item) =>
+    [item.question, item.answer].some((value) =>
+      value.toLowerCase().includes(normalizedQuestionSearch),
+    ),
+  );
 
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
@@ -164,6 +174,7 @@ function App() {
       `/api/pages/${encodeURIComponent(slug)}`,
     )) as Page;
     setPage(loaded);
+    setIsQuestionFormOpen(loaded.questions.length === 0);
     setPageForm({
       slug: loaded.slug,
       title: loaded.title,
@@ -515,93 +526,95 @@ function App() {
           {page && (
             <>
               <div className="section-heading">
-                <h3>Questions and answers</h3>
-                <span>{page.questions.length} items</span>
+                <div>
+                  <h3>Questions and answers</h3>
+                  <span>{page.questions.length} items</span>
+                </div>
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => {
+                    setEditingQuestionId(null);
+                    setIsQuestionFormOpen(true);
+                    setQuestionForm({ question: "", answer: "", displayOrder: page.questions.length });
+                  }}
+                >
+                  Add question
+                </button>
               </div>
-              <div className="questions">
-                {page.questions.map((item) => (
-                  <article className="question" key={item.id}>
-                    <div>
-                      <h4>{item.question}</h4>
-                      <p>{item.answer}</p>
-                    </div>
-                    <div className="actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingQuestionId(item.id);
-                          setQuestionForm({
-                            question: item.question,
-                            answer: item.answer,
-                            displayOrder: item.displayOrder,
-                          });
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="danger"
-                        type="button"
-                        onClick={() => deleteQuestion(item.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <form className="question-form" onSubmit={handleQuestionSubmit}>
-                <h3>{editingQuestionId ? "Edit question" : "Add question"}</h3>
-                <label>
-                  Question
-                  <input
-                    value={questionForm.question}
-                    onChange={(event) =>
-                      setQuestionForm({
-                        ...questionForm,
-                        question: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  Answer
-                  <textarea
-                    rows={8}
-                    value={questionForm.answer}
-                    onChange={(event) =>
-                      setQuestionForm({
-                        ...questionForm,
-                        answer: event.target.value,
-                      })
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  Order
-                  <input
-                    type="number"
-                    min="0"
-                    value={questionForm.displayOrder}
-                    onChange={(event) =>
-                      setQuestionForm({
-                        ...questionForm,
-                        displayOrder: Number(event.target.value),
-                      })
-                    }
-                    required
-                  />
-                </label>
-                <div className="actions">
-                  <button className="primary" type="submit">
-                    {editingQuestionId ? "Save question" : "Add question"}
-                  </button>
-                  {editingQuestionId && (
+              <label className="search-field question-search">
+                <span>Find a question</span>
+                <input
+                  type="search"
+                  value={questionSearch}
+                  onChange={(event) => setQuestionSearch(event.target.value)}
+                  placeholder="Search questions and answers"
+                />
+              </label>
+              {isQuestionFormOpen && (
+                <form className="question-form" onSubmit={handleQuestionSubmit}>
+                  <div className="question-form-heading">
+                    <h3>{editingQuestionId ? "Edit question" : "Add question"}</h3>
                     <button
                       type="button"
                       onClick={() => {
+                        setIsQuestionFormOpen(false);
+                        setEditingQuestionId(null);
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <label>
+                    Question
+                    <input
+                      value={questionForm.question}
+                      onChange={(event) =>
+                        setQuestionForm({
+                          ...questionForm,
+                          question: event.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    Answer
+                    <textarea
+                      rows={8}
+                      value={questionForm.answer}
+                      onChange={(event) =>
+                        setQuestionForm({
+                          ...questionForm,
+                          answer: event.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    Order
+                    <input
+                      type="number"
+                      min="0"
+                      value={questionForm.displayOrder}
+                      onChange={(event) =>
+                        setQuestionForm({
+                          ...questionForm,
+                          displayOrder: Number(event.target.value),
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <div className="actions">
+                    <button className="primary" type="submit">
+                      {editingQuestionId ? "Save question" : "Add question"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQuestionFormOpen(false);
                         setEditingQuestionId(null);
                         setQuestionForm({
                           question: "",
@@ -612,9 +625,71 @@ function App() {
                     >
                       Cancel
                     </button>
-                  )}
-                </div>
-              </form>
+                  </div>
+                </form>
+              )}
+              <div className="questions">
+                {visibleQuestions.map((item) => {
+                  const isExpanded = Boolean(expandedQuestions[item.id]);
+                  return (
+                    <article className="question" key={item.id}>
+                      <button
+                        className="question-toggle"
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() =>
+                          setExpandedQuestions((current) => ({
+                            ...current,
+                            [item.id]: !current[item.id],
+                          }))
+                        }
+                      >
+                        <span className="question-summary">
+                          <strong>{item.question}</strong>
+                          <span>Order {item.displayOrder}</span>
+                        </span>
+                        <span className="question-chevron" aria-hidden="true">
+                          {isExpanded ? "−" : "+"}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="question-body">
+                          <p>{item.answer}</p>
+                          <div className="actions">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingQuestionId(item.id);
+                                setIsQuestionFormOpen(true);
+                                setExpandedQuestions((current) => ({ ...current, [item.id]: true }));
+                                setQuestionForm({
+                                  question: item.question,
+                                  answer: item.answer,
+                                  displayOrder: item.displayOrder,
+                                });
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="danger"
+                              type="button"
+                              onClick={() => deleteQuestion(item.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              {!visibleQuestions.length && (
+                <p className="muted">
+                  {page.questions.length ? "No questions match your search." : "No questions yet."}
+                </p>
+              )}
             </>
           )}
           {loading && <p className="muted">Saving...</p>}
