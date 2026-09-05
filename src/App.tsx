@@ -7,6 +7,11 @@ type PageSummary = {
   section: string;
   displayOrder: number;
 };
+type Section = {
+  id: number;
+  name: string;
+  displayOrder: number;
+};
 type Question = {
   id: number;
   question: string;
@@ -74,6 +79,7 @@ function App() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [pages, setPages] = useState<PageSummary[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [page, setPage] = useState<Page | null>(null);
   const [pageForm, setPageForm] = useState<PageForm>({
@@ -96,7 +102,7 @@ function App() {
   const [slugWasEdited, setSlugWasEdited] = useState(false);
 
   const sectionSuggestions = Array.from(
-    new Set(pages.map((item) => item.section).filter(Boolean)),
+    new Set(sections.map((item) => item.name).filter(Boolean)),
   ).sort();
 
   const pagesBySection = Array.from(
@@ -119,6 +125,25 @@ function App() {
     if (!selectedSlug && list[0]) setSelectedSlug(list[0].slug);
   };
 
+  const loadSections = async () => {
+    const list = (await request("/api/admin/sections")) as Section[];
+    setSections(list.sort((left, right) => left.displayOrder - right.displayOrder));
+  };
+
+  const getOrCreateSection = async (name: string) => {
+    const existing = sections.find(
+      (section) => section.name.toLowerCase() === name.trim().toLowerCase(),
+    );
+    if (existing) return existing;
+
+    const created = (await request("/api/admin/sections", {
+      method: "POST",
+      body: JSON.stringify({ name: name.trim(), displayOrder: sections.length }),
+    })) as Section;
+    setSections((current) => [...current, created]);
+    return created;
+  };
+
   const loadPage = async (slug: string) => {
     const loaded = (await request(
       `/api/pages/${encodeURIComponent(slug)}`,
@@ -135,7 +160,7 @@ function App() {
   useEffect(() => {
     if (!credentials) return;
     setLoading(true);
-    loadPages()
+    Promise.all([loadPages(), loadSections()])
       .catch((err: Error) => {
         sessionStorage.removeItem(credentialsKey);
         setCredentials("");
@@ -175,21 +200,26 @@ function App() {
           "This slug already exists. Use a new slug, such as java-collections.",
         );
       }
+      const section = await getOrCreateSection(pageForm.section);
+      const payload = isNew
+        ? {
+            slug: pageForm.slug,
+            title: pageForm.title,
+            sectionId: section.id,
+            displayOrder: pageForm.displayOrder,
+          }
+        : {
+            title: pageForm.title,
+            sectionId: section.id,
+            displayOrder: pageForm.displayOrder,
+          };
       const result = (await request(
         isNew
           ? "/api/admin/pages"
           : `/api/admin/pages/${encodeURIComponent(page.slug)}`,
         {
           method: isNew ? "POST" : "PUT",
-          body: JSON.stringify(
-            isNew
-              ? pageForm
-              : {
-                  title: pageForm.title,
-                  section: pageForm.section,
-                  displayOrder: pageForm.displayOrder,
-                },
-          ),
+          body: JSON.stringify(payload),
         },
       )) as Page;
       setNotice(isNew ? "Page created" : "Page updated");
