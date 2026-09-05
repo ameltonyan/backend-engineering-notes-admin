@@ -95,6 +95,10 @@ function App() {
   const [notice, setNotice] = useState("");
   const [slugWasEdited, setSlugWasEdited] = useState(false);
 
+  const sectionSuggestions = Array.from(
+    new Set(pages.map((item) => item.section).filter(Boolean)),
+  ).sort();
+
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
     setPages(
@@ -339,9 +343,12 @@ function App() {
           <form className="page-form" onSubmit={handlePageSubmit}>
             <div className="form-fields">
               <label>
-                Section
+                <span className="field-label">
+                  Section <span className="label-note">(suggestions available)</span>
+                </span>
                 <input
                   value={pageForm.section}
+                  list="section-suggestions"
                   onChange={(event) =>
                     setPageForm({
                       ...pageForm,
@@ -353,8 +360,13 @@ function App() {
                   }
                   required
                 />
+                <datalist id="section-suggestions">
+                  {sectionSuggestions.map((section) => (
+                    <option key={section} value={section} />
+                  ))}
+                </datalist>
                 <small className="field-hint">
-                  Can be reused, for example <code>Java</code>.
+                  Choose an existing section or type a new one.
                 </small>
               </label>
               <label>
