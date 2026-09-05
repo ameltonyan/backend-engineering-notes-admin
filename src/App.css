@@ -132,6 +132,49 @@ h3 {
   white-space: nowrap;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 34, 31, .42);
+}
+
+.confirm-modal {
+  width: min(460px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 10px 12px 0 rgba(7, 88, 67, .18);
+}
+
+.confirm-modal h2 {
+  margin-bottom: 12px;
+}
+
+.confirm-modal p:not(.eyebrow) {
+  color: var(--muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.danger-button {
+  border-color: #e4bcbc;
+  background: #fff8f8;
+}
+
+.danger-button:hover {
+  border-color: var(--red);
+  background: #fcecec;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;

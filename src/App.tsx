@@ -26,6 +26,9 @@ type PageForm = {
   displayOrder: number;
 };
 type QuestionForm = { question: string; answer: string; displayOrder: number };
+type DeleteConfirmation =
+  | { type: "page"; title: string }
+  | { type: "question"; id: number; title: string };
 type ApiErrorPayload = { message?: string; detail?: string };
 
 class ApiRequestError extends Error {
@@ -131,9 +134,27 @@ function App() {
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
   const [questionFieldError, setQuestionFieldError] = useState("");
   const [pageFieldError, setPageFieldError] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
+
+  useEffect(() => {
+    if (!notice) return;
+
+    const timeoutId = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!deleteConfirmation) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) setDeleteConfirmation(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteConfirmation, loading]);
 
   const sectionSuggestions = Array.from(
     new Set(sections.map((item) => item.name).filter(Boolean)),
@@ -340,15 +361,17 @@ function App() {
   };
 
   const deleteQuestion = async (questionId: number) => {
-    if (!page || !window.confirm("Delete this question?")) return;
+    if (!page) return;
     setLoading(true);
     setError("");
     setNotice("");
     try {
       await request(`/api/admin/questions/${questionId}`, { method: "DELETE" });
       await loadPage(page.slug);
+      setDeleteConfirmation(null);
       setNotice("Question deleted");
     } catch (err) {
+      setDeleteConfirmation(null);
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -382,7 +405,7 @@ function App() {
   };
 
   const deletePage = async () => {
-    if (!page || !window.confirm(`Delete ${page.title}?`)) return;
+    if (!page) return;
     setLoading(true);
     setError("");
     setNotice("");
@@ -392,9 +415,11 @@ function App() {
       });
       setPage(null);
       setSelectedSlug("");
+      setDeleteConfirmation(null);
       setNotice("Page deleted");
       await loadPages();
     } catch (err) {
+      setDeleteConfirmation(null);
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -553,7 +578,11 @@ function App() {
               <h2>{page?.title ?? "Create your first page"}</h2>
             </div>
             {page && (
-              <button className="danger" type="button" onClick={deletePage}>
+              <button
+                className="danger"
+                type="button"
+                onClick={() => setDeleteConfirmation({ type: "page", title: page.title })}
+              >
                 Delete page
               </button>
             )}
@@ -829,7 +858,13 @@ function App() {
                             <button
                               className="danger"
                               type="button"
-                              onClick={() => deleteQuestion(item.id)}
+                              onClick={() =>
+                                setDeleteConfirmation({
+                                  type: "question",
+                                  id: item.id,
+                                  title: item.question,
+                                })
+                              }
                             >
                               Delete
                             </button>
@@ -850,6 +885,47 @@ function App() {
           {loading && <p className="muted">Saving...</p>}
         </section>
       </div>
+      {deleteConfirmation && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirmation-title"
+            aria-describedby="delete-confirmation-description"
+          >
+            <p className="eyebrow">Confirm deletion</p>
+            <h2 id="delete-confirmation-title">
+              Delete {deleteConfirmation.type === "page" ? "page" : "question"}?
+            </h2>
+            <p id="delete-confirmation-description">
+              <strong>{deleteConfirmation.title}</strong> will be permanently removed.
+              This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setDeleteConfirmation(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger danger-button"
+                type="button"
+                disabled={loading}
+                onClick={() =>
+                  deleteConfirmation.type === "page"
+                    ? deletePage()
+                    : deleteQuestion(deleteConfirmation.id)
+                }
+              >
+                {loading ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
