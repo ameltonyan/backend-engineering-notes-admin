@@ -303,30 +303,17 @@ function App() {
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedQuestions.length) return;
 
-    const currentQuestion = orderedQuestions[currentIndex];
-    const targetQuestion = orderedQuestions[targetIndex];
+    const reorderedQuestionIds = orderedQuestions.map((question) => question.id);
+    const [movedQuestionId] = reorderedQuestionIds.splice(currentIndex, 1);
+    reorderedQuestionIds.splice(targetIndex, 0, movedQuestionId);
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await Promise.all([
-        request(`/api/admin/questions/${currentQuestion.id}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            question: currentQuestion.question,
-            answer: currentQuestion.answer,
-            displayOrder: targetQuestion.displayOrder,
-          }),
-        }),
-        request(`/api/admin/questions/${targetQuestion.id}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            question: targetQuestion.question,
-            answer: targetQuestion.answer,
-            displayOrder: currentQuestion.displayOrder,
-          }),
-        }),
-      ]);
+      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions/order`, {
+        method: "PUT",
+        body: JSON.stringify({ questionIds: reorderedQuestionIds }),
+      });
       await loadPage(page.slug);
       setNotice("Question order saved");
     } catch (err) {
@@ -581,7 +568,14 @@ function App() {
                   onClick={() => {
                     setEditingQuestionId(null);
                     setIsQuestionFormOpen(true);
-                    setQuestionForm({ question: "", answer: "", displayOrder: page.questions.length });
+                    setQuestionForm({
+                      question: "",
+                      answer: "",
+                      displayOrder: Math.max(
+                        -1,
+                        ...page.questions.map((question) => question.displayOrder),
+                      ) + 1,
+                    });
                   }}
                 >
                   Add question
