@@ -26,6 +26,17 @@ type PageForm = {
   displayOrder: number;
 };
 type QuestionForm = { question: string; answer: string; displayOrder: number };
+type ApiErrorPayload = { message?: string; detail?: string };
+
+class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
 
 const apiBaseUrl = (
   import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8080"
@@ -49,26 +60,39 @@ async function request(
   options: RequestInit = {},
   credentials = readCredentials(),
 ) {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
-      ...options.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiRequestError(
+      "The API is unavailable. Check that the backend is running and try again.",
+      0,
+    );
+  }
 
   if (!response.ok) {
     if (response.status === 401)
-      throw new Error("Invalid admin username or password");
+      throw new ApiRequestError("Invalid admin username or password.", 401);
     if (response.status === 403)
-      throw new Error("Admin access was rejected. Sign out and sign in again.");
-    if (response.status === 409)
-      throw new Error(
-        "A page with this slug already exists. Choose a different slug.",
-      );
-    const message = await response.text();
-    throw new Error(message || `Request failed (${response.status})`);
+      throw new ApiRequestError("You do not have permission to perform this action.", 403);
+    const body = await response.text();
+    let message = body;
+    try {
+      const parsed = JSON.parse(body) as ApiErrorPayload;
+      message = parsed.message || parsed.detail || body;
+    } catch {
+      // Keep the plain response when the API does not return JSON.
+    }
+    if (response.status === 409 && !message)
+      message = "This content has changed. Reload and try again.";
+    throw new ApiRequestError(message || `Request failed (${response.status})`, response.status);
   }
 
   return response.status === 204 ? null : response.json();
@@ -105,6 +129,11 @@ function App() {
   const [questionSearch, setQuestionSearch] = useState("");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
+  const [questionFieldError, setQuestionFieldError] = useState("");
+  const [pageFieldError, setPageFieldError] = useState("");
+
+  const getErrorMessage = (err: unknown) =>
+    err instanceof Error ? err.message : "Something went wrong. Please try again.";
 
   const sectionSuggestions = Array.from(
     new Set(sections.map((item) => item.name).filter(Boolean)),
@@ -190,10 +219,12 @@ function App() {
     if (!credentials) return;
     setLoading(true);
     Promise.all([loadPages(), loadSections()])
-      .catch((err: Error) => {
-        sessionStorage.removeItem(credentialsKey);
-        setCredentials("");
-        setError(err.message);
+      .catch((err: unknown) => {
+        if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
+          sessionStorage.removeItem(credentialsKey);
+          setCredentials("");
+        }
+        setError(getErrorMessage(err));
       })
       .finally(() => setLoading(false));
   }, [credentials]);
@@ -203,7 +234,7 @@ function App() {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
     setQuestionForm({ question: "", answer: "", displayOrder: 0 });
-    loadPage(selectedSlug).catch((err: Error) => setError(err.message));
+    loadPage(selectedSlug).catch((err: unknown) => setError(getErrorMessage(err)));
   }, [credentials, selectedSlug]);
 
   const handleLogin = async (event: FormEvent) => {
@@ -216,15 +247,24 @@ function App() {
       setCredentials(encoded);
       setPassword("");
     } catch (err) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     }
   };
 
   const handlePageSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setLoading(true);
     setError("");
     setNotice("");
+    setPageFieldError("");
+    if (!pageForm.section.trim() || !pageForm.title.trim() || !pageForm.slug.trim()) {
+      setPageFieldError("Section, title, and slug are required.");
+      return;
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pageForm.slug.trim())) {
+      setPageFieldError("Slug must contain lowercase letters, numbers, and hyphens only.");
+      return;
+    }
+    setLoading(true);
     try {
       const isNew = !page;
       if (isNew && pages.some((item) => item.slug === pageForm.slug.trim())) {
@@ -235,13 +275,13 @@ function App() {
       const section = await getOrCreateSection(pageForm.section);
       const payload = isNew
         ? {
-            slug: pageForm.slug,
-            title: pageForm.title,
+            slug: pageForm.slug.trim(),
+            title: pageForm.title.trim(),
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
           }
         : {
-            title: pageForm.title,
+            title: pageForm.title.trim(),
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
           };
@@ -259,7 +299,7 @@ function App() {
       setSelectedSlug(result.slug);
       await loadPage(result.slug);
     } catch (err) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -268,23 +308,32 @@ function App() {
   const handleQuestionSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!page) return;
-    setLoading(true);
     setError("");
     setNotice("");
+    setQuestionFieldError("");
+    if (!questionForm.question.trim() || !questionForm.answer.trim()) {
+      setQuestionFieldError("Question and answer are required.");
+      return;
+    }
+    setLoading(true);
     try {
       const path = editingQuestionId
         ? `/api/admin/questions/${editingQuestionId}`
         : `/api/admin/pages/${encodeURIComponent(page.slug)}/questions`;
       await request(path, {
         method: editingQuestionId ? "PUT" : "POST",
-        body: JSON.stringify(questionForm),
+        body: JSON.stringify({
+          ...questionForm,
+          question: questionForm.question.trim(),
+          answer: questionForm.answer.trim(),
+        }),
       });
       setQuestionForm({ question: "", answer: "", displayOrder: 0 });
       setEditingQuestionId(null);
       await loadPage(page.slug);
       setNotice(editingQuestionId ? "Question updated" : "Question added");
     } catch (err) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -292,9 +341,18 @@ function App() {
 
   const deleteQuestion = async (questionId: number) => {
     if (!page || !window.confirm("Delete this question?")) return;
-    await request(`/api/admin/questions/${questionId}`, { method: "DELETE" });
-    await loadPage(page.slug);
-    setNotice("Question deleted");
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/admin/questions/${questionId}`, { method: "DELETE" });
+      await loadPage(page.slug);
+      setNotice("Question deleted");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const moveQuestion = async (questionId: number, direction: -1 | 1) => {
@@ -317,7 +375,7 @@ function App() {
       await loadPage(page.slug);
       setNotice("Question order saved");
     } catch (err) {
-      setError((err as Error).message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -325,13 +383,22 @@ function App() {
 
   const deletePage = async () => {
     if (!page || !window.confirm(`Delete ${page.title}?`)) return;
-    await request(`/api/admin/pages/${encodeURIComponent(page.slug)}`, {
-      method: "DELETE",
-    });
-    setPage(null);
-    setSelectedSlug("");
-    setNotice("Page deleted");
-    await loadPages();
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}`, {
+        method: "DELETE",
+      });
+      setPage(null);
+      setSelectedSlug("");
+      setNotice("Page deleted");
+      await loadPages();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!credentials) {
@@ -461,6 +528,25 @@ function App() {
           )}
         </aside>
         <section className="editor">
+          {(error || notice) && (
+            <div
+              className={error ? "status-banner error-banner" : "status-banner notice-banner"}
+              role={error ? "alert" : "status"}
+              aria-live="polite"
+            >
+              <span>{error || notice}</span>
+              <button
+                type="button"
+                aria-label="Dismiss message"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                Close
+              </button>
+            </div>
+          )}
           <div className="editor-heading">
             <div>
               <p className="eyebrow">{page ? "Editing page" : "New page"}</p>
@@ -481,15 +567,16 @@ function App() {
                 <input
                   value={pageForm.section}
                   list="section-suggestions"
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setPageFieldError("");
                     setPageForm({
                       ...pageForm,
                       section: event.target.value,
                       ...(page || slugWasEdited
                         ? {}
                         : { slug: generateSlug(event.target.value, pageForm.title) }),
-                    })
-                  }
+                    });
+                  }}
                   required
                 />
                 <datalist id="section-suggestions">
@@ -500,20 +587,22 @@ function App() {
                 <small className="field-hint">
                   Choose an existing section or type a new one.
                 </small>
+                {pageFieldError && <small className="field-error">{pageFieldError}</small>}
               </label>
               <label>
                 Title
                 <input
                   value={pageForm.title}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setPageFieldError("");
                     setPageForm({
                       ...pageForm,
                       title: event.target.value,
                       ...(page || slugWasEdited
                         ? {}
                         : { slug: generateSlug(pageForm.section, event.target.value) }),
-                    })
-                  }
+                    });
+                  }}
                   required
                 />
               </label>
@@ -523,6 +612,7 @@ function App() {
                   value={pageForm.slug}
                   disabled={Boolean(page)}
                   onChange={(event) => {
+                    setPageFieldError("");
                     setSlugWasEdited(true);
                     setPageForm({ ...pageForm, slug: event.target.value });
                   }}
@@ -608,26 +698,29 @@ function App() {
                     Question
                     <input
                       value={questionForm.question}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setQuestionFieldError("");
                         setQuestionForm({
                           ...questionForm,
                           question: event.target.value,
-                        })
-                      }
+                        });
+                      }}
                       required
                     />
+                    {questionFieldError && <small className="field-error">{questionFieldError}</small>}
                   </label>
                   <label>
                     Answer
                     <textarea
                       rows={8}
                       value={questionForm.answer}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setQuestionFieldError("");
                         setQuestionForm({
                           ...questionForm,
                           answer: event.target.value,
-                        })
-                      }
+                        });
+                      }}
                       required
                     />
                   </label>
@@ -755,8 +848,6 @@ function App() {
             </>
           )}
           {loading && <p className="muted">Saving...</p>}
-          {notice && <p className="notice">{notice}</p>}
-          {error && <p className="error">{error}</p>}
         </section>
       </div>
     </main>

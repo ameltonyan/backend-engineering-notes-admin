@@ -99,6 +99,39 @@ h3 {
   color: var(--green);
 }
 
+.status-banner {
+  position: sticky;
+  top: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 4px 4px 0 #dce8df;
+}
+
+.error-banner {
+  color: var(--red);
+  border-color: #e4bcbc;
+  background: #fff8f8;
+}
+
+.notice-banner {
+  color: var(--green-dark);
+  border-color: #b9d5c4;
+  background: #f4fbf5;
+}
+
+.status-banner button {
+  padding: 4px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -161,6 +194,12 @@ input:disabled {
 
 .field-hint {
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.field-error {
+  color: var(--red);
   font-size: 12px;
   font-weight: 400;
 }
