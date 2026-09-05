@@ -206,6 +206,22 @@ input:disabled {
   margin-bottom: 0;
 }
 
+.page-section-group {
+  margin-top: 24px;
+}
+
+.page-section-group:first-of-type {
+  margin-top: 20px;
+}
+
+.page-section-title {
+  color: var(--green-dark);
+  font: 12px 'DM Mono', monospace;
+  letter-spacing: .08em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
 .page-item {
   display: grid;
   text-align: left;

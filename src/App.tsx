@@ -99,6 +99,18 @@ function App() {
     new Set(pages.map((item) => item.section).filter(Boolean)),
   ).sort();
 
+  const pagesBySection = Array.from(
+    pages.reduce((groups, item) => {
+      const section = item.section || "Other";
+      const sectionPages = groups.get(section) ?? [];
+      sectionPages.push(item);
+      groups.set(section, sectionPages);
+      return groups;
+    }, new Map<string, PageSummary[]>()),
+  ).sort(([, leftPages], [, rightPages]) =>
+    (leftPages[0]?.displayOrder ?? 0) - (rightPages[0]?.displayOrder ?? 0),
+  );
+
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
     setPages(
@@ -311,20 +323,23 @@ function App() {
               New page
             </button>
           </div>
-          {pages.map((item) => (
-            <button
-              className={
-                item.slug === selectedSlug ? "page-item active" : "page-item"
-              }
-              key={item.slug}
-              type="button"
-              onClick={() => setSelectedSlug(item.slug)}
-            >
-              <strong>{item.title}</strong>
-              <span>
-                {item.section} · {item.slug}
-              </span>
-            </button>
+          {pagesBySection.map(([section, sectionPages]) => (
+            <div className="page-section-group" key={section}>
+              <h3 className="page-section-title">{section}</h3>
+              {sectionPages.map((item) => (
+                <button
+                  className={
+                    item.slug === selectedSlug ? "page-item active" : "page-item"
+                  }
+                  key={item.slug}
+                  type="button"
+                  onClick={() => setSelectedSlug(item.slug)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.slug}</span>
+                </button>
+              ))}
+            </div>
           ))}
           {!pages.length && <p className="muted">No pages yet.</p>}
         </aside>
