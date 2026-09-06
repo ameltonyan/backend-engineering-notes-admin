@@ -230,6 +230,15 @@ textarea {
   resize: vertical;
 }
 
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: white;
+}
+
 input:disabled {
   color: var(--muted);
   background: #edf0eb;
@@ -422,6 +431,51 @@ input:disabled {
 
 .question-search {
   margin: 18px 0 0;
+}
+
+.ai-assist {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid #b9d5c4;
+  background: #f4fbf5;
+}
+
+.ai-assist .section-heading {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ai-form {
+  margin-top: 16px;
+}
+
+.ai-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.generated-questions {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.generated-questions h4 {
+  margin: 0;
+}
+
+.generated-question {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.generated-question p {
+  white-space: pre-wrap;
+  margin-bottom: 0;
 }
 
 .questions {

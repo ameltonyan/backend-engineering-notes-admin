@@ -26,6 +26,9 @@ type PageForm = {
   displayOrder: number;
 };
 type QuestionForm = { question: string; answer: string; displayOrder: number };
+type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
+type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
+type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
 type DeleteConfirmation =
   | { type: "page"; title: string }
   | { type: "question"; id: number; title: string };
@@ -135,6 +138,12 @@ function App() {
   const [questionFieldError, setQuestionFieldError] = useState("");
   const [pageFieldError, setPageFieldError] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
+  const [aiIdea, setAiIdea] = useState("");
+  const [aiDifficulty, setAiDifficulty] = useState<Difficulty>("INTERMEDIATE");
+  const [aiType, setAiType] = useState<QuestionType>("CONCEPTUAL");
+  const [aiCount, setAiCount] = useState(3);
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -358,6 +367,39 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const generateQuestions = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    if (!aiIdea.trim()) {
+      setError("Add an idea before generating questions.");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const result = (await request("/api/admin/ai/questions/generate", {
+        method: "POST",
+        body: JSON.stringify({ idea: aiIdea.trim(), difficulty: aiDifficulty, type: aiType, count: aiCount }),
+      })) as { questions: GeneratedQuestion[] };
+      setGeneratedQuestions(result.questions);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const useGeneratedQuestion = (generated: GeneratedQuestion) => {
+    setQuestionForm({
+      question: generated.question,
+      answer: generated.answer,
+      displayOrder: Math.max(-1, ...(page?.questions ?? []).map((question) => question.displayOrder)) + 1,
+    });
+    setEditingQuestionId(null);
+    setIsQuestionFormOpen(true);
+    setGeneratedQuestions([]);
+    setQuestionFieldError("");
   };
 
   const deleteQuestion = async (questionId: number) => {
@@ -789,6 +831,79 @@ function App() {
                   </div>
                 </form>
               )}
+              <section className="ai-assist">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">AI assist</p>
+                    <h3>Draft question options</h3>
+                    <span>Review the draft, then use the normal Save button.</span>
+                  </div>
+                </div>
+                <form className="ai-form" onSubmit={generateQuestions}>
+                  <label>
+                    Idea
+                    <textarea
+                      rows={3}
+                      value={aiIdea}
+                      onChange={(event) => setAiIdea(event.target.value)}
+                      placeholder="HashMap vs ConcurrentHashMap and when to use each"
+                    />
+                  </label>
+                  <div className="ai-fields">
+                    <label>
+                      Difficulty
+                      <select value={aiDifficulty} onChange={(event) => setAiDifficulty(event.target.value as Difficulty)}>
+                        <option value="BEGINNER">Beginner</option>
+                        <option value="INTERMEDIATE">Intermediate</option>
+                        <option value="ADVANCED">Advanced</option>
+                        <option value="EXPERT">Expert</option>
+                      </select>
+                    </label>
+                    <label>
+                      Type
+                      <select value={aiType} onChange={(event) => setAiType(event.target.value as QuestionType)}>
+                        <option value="CONCEPTUAL">Conceptual</option>
+                        <option value="CODE">Code</option>
+                        <option value="MULTIPLE_CHOICE">Multiple choice</option>
+                        <option value="TRUE_FALSE">True / false</option>
+                        <option value="SCENARIO">Scenario</option>
+                        <option value="INTERVIEW">Interview</option>
+                        <option value="TRICK">Trick question</option>
+                      </select>
+                    </label>
+                    <label>
+                      Options
+                      <select value={aiCount} onChange={(event) => setAiCount(Number(event.target.value))}>
+                        <option value={1}>1</option>
+                        <option value={3}>3</option>
+                        <option value={5}>5</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="actions">
+                    <button className="primary" type="submit" disabled={aiLoading}>
+                      {aiLoading ? "Generating..." : "Generate options"}
+                    </button>
+                  </div>
+                </form>
+                {generatedQuestions.length > 0 && (
+                  <div className="generated-questions">
+                    <h4>Generated questions</h4>
+                    {generatedQuestions.map((generated, index) => (
+                      <article className="generated-question" key={`${generated.question}-${index}`}>
+                        <span className="eyebrow">Option {index + 1}</span>
+                        <strong>{generated.question}</strong>
+                        <p>{generated.answer}</p>
+                        <div className="actions">
+                          <button className="primary" type="button" onClick={() => useGeneratedQuestion(generated)}>
+                            Use this
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
               <div className="questions">
                 {visibleQuestions.map((item) => {
                   const isExpanded = Boolean(expandedQuestions[item.id]);
