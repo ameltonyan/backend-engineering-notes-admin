@@ -26,6 +26,16 @@ type PageForm = {
   displayOrder: number;
 };
 type QuestionForm = { question: string; answer: string; displayOrder: number };
+type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
+type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
+type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
+type AiUsage = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+};
 type DeleteConfirmation =
   | { type: "page"; title: string }
   | { type: "question"; id: number; title: string };
@@ -62,22 +72,36 @@ async function request(
   path: string,
   options: RequestInit = {},
   credentials = readCredentials(),
+  timeoutMs?: number,
 ) {
   let response: Response;
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeoutId = timeoutMs
+    ? window.setTimeout(() => controller?.abort(), timeoutMs)
+    : undefined;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       ...options,
+      ...(controller ? { signal: controller.signal } : {}),
       headers: {
         "Content-Type": "application/json",
         ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
         ...options.headers,
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiRequestError(
+        "The AI request took too long to respond. Try again or choose a lower reasoning effort.",
+        408,
+      );
+    }
     throw new ApiRequestError(
       "The API is unavailable. Check that the backend is running and try again.",
       0,
     );
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
@@ -135,6 +159,15 @@ function App() {
   const [questionFieldError, setQuestionFieldError] = useState("");
   const [pageFieldError, setPageFieldError] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
+  const [aiIdea, setAiIdea] = useState("");
+  const [aiDifficulty, setAiDifficulty] = useState<Difficulty>("ADVANCED");
+  const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
+  const [aiCount, setAiCount] = useState(3);
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestion | null>(null);
+  const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -357,6 +390,68 @@ function App() {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateQuestions = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    if (!aiIdea.trim()) {
+      setError("Add an idea before generating questions.");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const result = (await request("/api/admin/ai/questions/generate", {
+        method: "POST",
+        body: JSON.stringify({ idea: aiIdea.trim(), difficulty: aiDifficulty, type: aiType, count: aiCount }),
+      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      setGeneratedQuestions(result.questions);
+      setMergedQuestion(null);
+      setSelectedGeneratedIndexes([]);
+      setAiUsage(result.usage ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const useGeneratedQuestion = (generated: GeneratedQuestion) => {
+    setQuestionForm({
+      question: generated.question,
+      answer: generated.answer,
+      displayOrder: Math.max(-1, ...(page?.questions ?? []).map((question) => question.displayOrder)) + 1,
+    });
+    setEditingQuestionId(null);
+    setIsQuestionFormOpen(true);
+    setGeneratedQuestions([]);
+    setMergedQuestion(null);
+    setSelectedGeneratedIndexes([]);
+    setQuestionFieldError("");
+  };
+
+  const mergeSelectedQuestions = async () => {
+    if (selectedGeneratedIndexes.length !== 2) {
+      setError("Select exactly two generated questions to merge.");
+      return;
+    }
+    setError("");
+    setAiLoading(true);
+    try {
+      const result = (await request("/api/admin/ai/questions/merge", {
+        method: "POST",
+        body: JSON.stringify({
+          questions: selectedGeneratedIndexes.map((index) => generatedQuestions[index]),
+        }),
+      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      setMergedQuestion(result.questions[0] ?? null);
+      setSelectedGeneratedIndexes([]);
+      setAiUsage(result.usage ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -789,6 +884,123 @@ function App() {
                   </div>
                 </form>
               )}
+              <section className="ai-assist">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">AI assist</p>
+                    <h3>Draft question options</h3>
+                    <span>Review the draft, then use the normal Save button.</span>
+                  </div>
+                </div>
+                <form className="ai-form" onSubmit={generateQuestions}>
+                  <label>
+                    Idea
+                    <textarea
+                      rows={3}
+                      value={aiIdea}
+                      onChange={(event) => setAiIdea(event.target.value)}
+                      placeholder="HashMap vs ConcurrentHashMap and when to use each"
+                    />
+                  </label>
+                  <div className="ai-fields">
+                    <label>
+                      Difficulty
+                      <select value={aiDifficulty} onChange={(event) => setAiDifficulty(event.target.value as Difficulty)}>
+                        <option value="BEGINNER">Beginner</option>
+                        <option value="INTERMEDIATE">Intermediate</option>
+                        <option value="ADVANCED">Advanced</option>
+                        <option value="EXPERT">Expert</option>
+                      </select>
+                    </label>
+                    <label>
+                      Type
+                      <select value={aiType} onChange={(event) => setAiType(event.target.value as QuestionType)}>
+                        <option value="CONCEPTUAL">Conceptual</option>
+                        <option value="CODE">Code</option>
+                        <option value="MULTIPLE_CHOICE">Multiple choice</option>
+                        <option value="TRUE_FALSE">True / false</option>
+                        <option value="SCENARIO">Scenario</option>
+                        <option value="INTERVIEW">Interview</option>
+                        <option value="TRICK">Trick question</option>
+                      </select>
+                    </label>
+                    <label>
+                      Options
+                      <select value={aiCount} onChange={(event) => setAiCount(Number(event.target.value))}>
+                        <option value={1}>1</option>
+                        <option value={3}>3</option>
+                        <option value={5}>5</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="actions">
+                    <button className="primary" type="submit" disabled={aiLoading}>
+                      {aiLoading ? "Generating..." : "Generate options"}
+                    </button>
+                  </div>
+                </form>
+                {generatedQuestions.length > 0 && (
+                  <div className="generated-questions">
+                    <div className="generated-heading">
+                      <h4>Generated questions</h4>
+                      {aiUsage?.totalTokens !== undefined && (
+                        <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
+                      )}
+                    </div>
+                    <p className="field-hint">Select one to use it, or select two and merge them into a new draft.</p>
+                    {generatedQuestions.map((generated, index) => (
+                      <article className="generated-question" key={`${generated.question}-${index}`}>
+                        <label className="generated-select">
+                          <input
+                            type="checkbox"
+                            checked={selectedGeneratedIndexes.includes(index)}
+                            onChange={() =>
+                              setSelectedGeneratedIndexes((current) =>
+                                current.includes(index)
+                                  ? current.filter((item) => item !== index)
+                                  : current.length < 2 ? [...current, index] : current,
+                              )
+                            }
+                          />
+                          <span className="eyebrow">Option {index + 1}</span>
+                        </label>
+                        <strong>{generated.question}</strong>
+                        <p>{generated.answer}</p>
+                        <div className="actions">
+                          <button className="primary" type="button" onClick={() => useGeneratedQuestion(generated)}>
+                            Use this
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                    {mergedQuestion && (
+                      <article className="generated-question merged-question">
+                        <span className="eyebrow">AI merged response</span>
+                        <strong>{mergedQuestion.question}</strong>
+                        <p>{mergedQuestion.answer}</p>
+                        <div className="actions">
+                          <button className="primary" type="button" onClick={() => useGeneratedQuestion(mergedQuestion)}>
+                            Use AI response
+                          </button>
+                        </div>
+                      </article>
+                    )}
+                    <div className="actions generated-actions">
+                      <button type="button" onClick={mergeSelectedQuestions} disabled={aiLoading || selectedGeneratedIndexes.length !== 2}>
+                        {aiLoading ? "Merging..." : "Merge selected"}
+                      </button>
+                      <button
+                        className="primary"
+                        type="button"
+                        disabled={selectedGeneratedIndexes.length !== 1}
+                        onClick={() => useGeneratedQuestion(generatedQuestions[selectedGeneratedIndexes[0]])}
+                      >
+                        Use selected
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
               <div className="questions">
                 {visibleQuestions.map((item) => {
                   const isExpanded = Boolean(expandedQuestions[item.id]);
