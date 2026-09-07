@@ -900,23 +900,6 @@ function App() {
       </header>
       <div className="workspace">
         <aside className="page-list">
-          <nav className="primary-nav" aria-label="Primary navigation">
-            <p className="nav-label">Workspace</p>
-            <button className="nav-item active" type="button" onClick={() => scrollToSection("content-library")}>
-              <span aria-hidden="true">◈</span> Content library
-            </button>
-            <button className="nav-item" type="button" onClick={() => focusAiGeneration("main")}>
-              <span aria-hidden="true">✦</span> AI generation
-            </button>
-            <div className="nav-item nav-item-planned" title="Interview paths are not available yet">
-              <span aria-hidden="true">↗</span> Interview paths
-              <small>Soon</small>
-            </div>
-            <div className="nav-item nav-item-planned" title="Settings are not available yet">
-              <span aria-hidden="true">⚙</span> Settings
-              <small>Soon</small>
-            </div>
-          </nav>
           <div className="list-heading">
             <div className="topic-list-title">
               <h2>Topics &amp; sections</h2>

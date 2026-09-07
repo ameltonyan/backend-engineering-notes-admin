@@ -295,61 +295,6 @@ input:disabled {
   padding-right: 24px;
 }
 
-.primary-nav {
-  display: grid;
-  gap: 4px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--line);
-}
-
-.nav-label {
-  color: var(--muted);
-  font: 11px 'DM Mono', monospace;
-  letter-spacing: .08em;
-  margin: 0 0 8px;
-  text-transform: uppercase;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 10px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  text-align: left;
-}
-
-.nav-item-planned {
-  cursor: default;
-}
-
-.nav-item-planned small {
-  margin-left: auto;
-  color: var(--muted);
-  font: 10px 'DM Mono', monospace;
-  text-transform: uppercase;
-}
-
-.nav-item span {
-  width: 18px;
-  color: var(--blue);
-  text-align: center;
-}
-
-.nav-item:hover,
-.nav-item.active {
-  border-color: #b9d0d9;
-  background: #edf4f5;
-  color: var(--ink);
-}
-
-.nav-item:disabled {
-  opacity: .65;
-}
-
 .list-heading,
 .editor-heading,
 .section-heading,
