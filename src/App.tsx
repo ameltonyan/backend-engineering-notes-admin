@@ -485,7 +485,7 @@ function App() {
               </div>
               <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" onClick={() => focusAiGeneration("follow-up")}>Generate follow-up questions</button>
+              <button className="primary" type="button" onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
             </div>
           </section>
@@ -847,7 +847,7 @@ function App() {
             </div>
           </nav>
           <div className="list-heading">
-            <div>
+            <div className="topic-list-title">
               <h2>Topics &amp; sections</h2>
               <span className="list-count">{pages.length} total</span>
             </div>
@@ -1042,11 +1042,11 @@ function App() {
                 <div>
                   <p className="eyebrow">Interview path</p>
                   <h3>Question hierarchy</h3>
-                  <span>{page.section} / {page.title} · {page.questions.length} questions · select a node to set the working context</span>
+                  <span className="interview-context">{page.section} / {page.title} · {page.questions.length} questions · select a node to set the working context</span>
                 </div>
                 <div className="question-actions">
                   <button className="primary" type="button" onClick={() => focusAiGeneration("main")}>
-                    Generate main questions
+                    Generate main questions with AI
                   </button>
                   <button className="secondary" type="button" onClick={() => startQuestionCreation(null)}>
                     Main question
@@ -1249,7 +1249,7 @@ function App() {
                   </div>
                   <div className="actions">
                     <button className="primary" type="submit" disabled={aiLoading}>
-                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements" : aiGenerationMode === "follow-up" ? "Generate follow-up questions" : "Generate main questions"}
+                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : "Generate main questions with AI"}
                     </button>
                   </div>
                 </form>

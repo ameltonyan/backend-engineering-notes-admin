@@ -360,8 +360,32 @@ input:disabled {
   gap: 12px;
 }
 
+.list-heading {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
 .list-heading h2 {
   margin-bottom: 0;
+  font-size: 18px;
+}
+
+.topic-list-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topic-list-title h2 {
+  white-space: nowrap;
+}
+
+.list-heading > button {
+  justify-self: start;
+  padding: 8px 10px;
+  white-space: nowrap;
 }
 
 .list-count,
@@ -493,10 +517,11 @@ input:disabled {
 }
 
 .interview-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  justify-content: space-between;
-  gap: 20px;
+  column-gap: 24px;
+  row-gap: 12px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 14px;
 }
@@ -505,14 +530,22 @@ input:disabled {
   margin: 0 0 4px;
 }
 
-.interview-heading > div:first-child > span {
+.interview-context {
+  display: block;
+  max-width: 56ch;
   color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .question-actions {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+  align-self: end;
+  white-space: nowrap;
 }
 
 .hierarchy-guide {
@@ -1008,6 +1041,15 @@ button:disabled {
   .question-inspector {
     align-items: start;
     flex-direction: column;
+  }
+
+  .interview-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .question-actions {
+    justify-content: flex-start;
+    white-space: normal;
   }
 
   .inspector-actions {
