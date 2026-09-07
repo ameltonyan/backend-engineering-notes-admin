@@ -885,6 +885,30 @@ input:disabled {
   margin-top: 16px;
 }
 
+.ai-edit-context {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border-left: 3px solid var(--green);
+  background: var(--panel);
+}
+
+.ai-edit-context .field-hint {
+  margin: 0;
+}
+
+.ai-edit-context strong,
+.ai-edit-context p:last-child {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-edit-context p:last-child {
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
 .ai-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

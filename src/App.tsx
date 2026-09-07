@@ -424,6 +424,22 @@ function App() {
     });
   };
 
+  const improveQuestionWithAi = (question: Question) => {
+    setSelectedQuestionId(question.id);
+    setEditingQuestionId(question.id);
+    setAiGenerationMode("main");
+    setAiIdea("");
+    setGeneratedQuestions([]);
+    setMergedQuestion(null);
+    setSelectedGeneratedIndexes([]);
+    setIsQuestionFormOpen(false);
+    setIsAiPanelOpen(true);
+    window.requestAnimationFrame(() => {
+      scrollToSection("ai-assist");
+      document.getElementById("ai-idea")?.focus();
+    });
+  };
+
   const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
     if (!hasVisibleQuestion(question)) return null;
     const children = orderedQuestions.filter((candidate) => candidate.parentQuestionId === question.id);
@@ -488,6 +504,7 @@ function App() {
                 <button type="button" aria-label="Move question down" title={selectedSiblingIndex < selectedSiblings.length - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblings.length - 1} onClick={() => moveQuestion(question.id, 1)}>↓</button>
               </div>
               <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
+              <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
               <button className="primary" type="button" onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
@@ -1227,14 +1244,22 @@ function App() {
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
+                  {selectedQuestion && editingQuestionId !== null && (
+                    <div className="ai-edit-context">
+                      <p className="field-hint">Current question</p>
+                      <strong>{selectedQuestion.question}</strong>
+                      <p className="field-hint">Current answer</p>
+                      <p>{selectedQuestion.answer}</p>
+                    </div>
+                  )}
                   <label>
-                    Idea
+                    {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : "Idea"}
                     <textarea
                       rows={3}
                       id="ai-idea"
                       value={aiIdea}
                       onChange={(event) => setAiIdea(event.target.value)}
-                      placeholder={selectedQuestion ? "What should the interviewer probe next?" : "LongAdder and contention in Java concurrency"}
+                      placeholder={selectedQuestion && editingQuestionId !== null ? "For example: Make the answer more conversational, simplify the explanation, or rewrite this as a senior-backend interview question." : selectedQuestion ? "What should the interviewer probe next?" : "LongAdder and contention in Java concurrency"}
                     />
                   </label>
                   <div className="ai-fields">
@@ -1294,7 +1319,7 @@ function App() {
                         <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
                       )}
                     </div>
-                    <p className="field-hint">Choose a candidate to load it into the editor. Review it there, then save the question.</p>
+                    <p className="field-hint">{selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     {generatedQuestions.map((generated, index) => (
                       <article className="generated-question" key={`${generated.question}-${index}`}>
                         <label className="generated-select">
@@ -1316,7 +1341,7 @@ function App() {
                         <p>{generated.answer}</p>
                         <div className="actions">
                           <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
-                            Use in editor
+                            {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
                           </button>
                         </div>
                       </article>
