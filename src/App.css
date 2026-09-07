@@ -465,6 +465,13 @@ input:disabled {
   margin: 0;
 }
 
+.generated-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .generated-question {
   display: grid;
   gap: 8px;
@@ -476,6 +483,31 @@ input:disabled {
 .generated-question p {
   white-space: pre-wrap;
   margin-bottom: 0;
+}
+
+.merged-question {
+  border-color: var(--green);
+  box-shadow: 4px 4px 0 #c9ddd0;
+}
+
+.generated-select {
+  display: flex;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.generated-select input {
+  width: auto;
+}
+
+.generated-select .eyebrow {
+  margin: 0;
+}
+
+.generated-actions {
+  justify-content: flex-end;
 }
 
 .questions {
