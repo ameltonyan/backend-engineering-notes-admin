@@ -413,6 +413,12 @@ input:disabled {
   margin-top: 20px;
 }
 
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .page-section-title {
   color: var(--green-dark);
   font: 12px 'DM Mono', monospace;
@@ -458,12 +464,33 @@ input:disabled {
   content: '−';
 }
 
+.section-order-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.section-order-actions button {
+  width: 26px;
+  min-width: 26px;
+  padding: 4px 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.section-order-actions button:hover:not(:disabled) {
+  border-color: var(--line);
+  color: var(--green-dark);
+}
+
 .page-item {
-  display: grid;
-  text-align: left;
+  display: flex;
+  align-items: stretch;
   width: 100%;
   margin-top: 10px;
-  padding: 13px;
+  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
 .page-item.active {
@@ -471,9 +498,45 @@ input:disabled {
   box-shadow: 4px 4px 0 #c9ddd0;
 }
 
+.page-select {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 13px;
+  text-align: left;
+}
+
+.page-select:hover {
+  border-color: transparent;
+}
+
 .page-item span {
   font: 12px 'DM Mono', monospace;
   overflow-wrap: anywhere;
+}
+
+.page-order-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+}
+
+.page-order-actions button {
+  width: 26px;
+  min-width: 26px;
+  padding: 4px 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.page-order-actions button:hover:not(:disabled) {
+  border-color: var(--line);
+  color: var(--green-dark);
 }
 
 .editor {

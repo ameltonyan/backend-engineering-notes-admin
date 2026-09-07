@@ -753,6 +753,56 @@ function App() {
     }
   };
 
+  const moveSection = async (sectionId: number, direction: -1 | 1) => {
+    const currentIndex = sections.findIndex((section) => section.id === sectionId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
+
+    const reorderedSectionIds = sections.map((section) => section.id);
+    const [movedSectionId] = reorderedSectionIds.splice(currentIndex, 1);
+    reorderedSectionIds.splice(targetIndex, 0, movedSectionId);
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await request("/api/admin/sections/order", {
+        method: "PUT",
+        body: JSON.stringify({ sectionIds: reorderedSectionIds }),
+      });
+      await loadSections();
+      setNotice("Section order saved");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const movePage = async (sectionId: number, sectionPages: PageSummary[], slug: string, direction: -1 | 1) => {
+    const currentIndex = sectionPages.findIndex((item) => item.slug === slug);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sectionPages.length) return;
+
+    const pageSlugs = sectionPages.map((item) => item.slug);
+    const [movedSlug] = pageSlugs.splice(currentIndex, 1);
+    pageSlugs.splice(targetIndex, 0, movedSlug);
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/admin/sections/${sectionId}/pages/order`, {
+        method: "PUT",
+        body: JSON.stringify({ pageSlugs }),
+      });
+      await loadPages();
+      setNotice("Page order saved");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deletePage = async () => {
     if (!page) return;
     setLoading(true);
@@ -881,38 +931,51 @@ function App() {
               placeholder="Title, slug, or section"
             />
           </label>
-          {pagesBySection.map(([section, sectionPages]) => (
+          {pagesBySection.map(([section, sectionPages]) => {
+            const currentSection = sections.find((item) => item.name === section);
+            const sectionIndex = currentSection ? sections.findIndex((item) => item.id === currentSection.id) : -1;
+            return (
             <div className="page-section-group" key={section}>
-              <button
-                className="section-toggle"
-                type="button"
-                aria-expanded={!collapsedSections[section]}
-                onClick={() =>
-                  setCollapsedSections((current) => ({
-                    ...current,
-                    [section]: !current[section],
-                  }))
-                }
-              >
-                <span className="page-section-title">{section}</span>
-                <span className="section-count">{sectionPages.length}</span>
-              </button>
+              <div className="section-heading-row">
+                <button
+                  className="section-toggle"
+                  type="button"
+                  aria-expanded={!collapsedSections[section]}
+                  onClick={() =>
+                    setCollapsedSections((current) => ({
+                      ...current,
+                      [section]: !current[section],
+                    }))
+                  }
+                >
+                  <span className="page-section-title">{section}</span>
+                  <span className="section-count">{sectionPages.length}</span>
+                </button>
+                {currentSection && (
+                  <div className="section-order-actions" aria-label={`Change ${section} section order`}>
+                    <button type="button" aria-label={`Move ${section} up`} title="Move section up" disabled={sectionIndex <= 0 || loading} onClick={() => moveSection(currentSection.id, -1)}>↑</button>
+                    <button type="button" aria-label={`Move ${section} down`} title="Move section down" disabled={sectionIndex >= sections.length - 1 || loading} onClick={() => moveSection(currentSection.id, 1)}>↓</button>
+                  </div>
+                )}
+              </div>
               {!collapsedSections[section] &&
-                sectionPages.map((item) => (
-                  <button
-                    className={
-                      item.slug === selectedSlug ? "page-item active" : "page-item"
-                    }
-                    key={item.slug}
-                    type="button"
-                    onClick={() => setSelectedSlug(item.slug)}
-                  >
-                    <strong>{item.title}</strong>
-                    <span>{item.slug}</span>
-                  </button>
+                sectionPages.map((item, pageIndex) => (
+                  <div className={item.slug === selectedSlug ? "page-item active" : "page-item"} key={item.slug}>
+                    <button type="button" className="page-select" onClick={() => setSelectedSlug(item.slug)}>
+                      <strong>{item.title}</strong>
+                      <span>{item.slug}</span>
+                    </button>
+                    {item.slug === selectedSlug && currentSection && (
+                      <div className="page-order-actions" aria-label={`Change ${item.title} page order`}>
+                        <button type="button" aria-label={`Move ${item.title} up`} title="Move page up" disabled={pageIndex === 0 || loading} onClick={() => movePage(currentSection.id, sectionPages, item.slug, -1)}>↑</button>
+                        <button type="button" aria-label={`Move ${item.title} down`} title="Move page down" disabled={pageIndex === sectionPages.length - 1 || loading} onClick={() => movePage(currentSection.id, sectionPages, item.slug, 1)}>↓</button>
+                      </div>
+                    )}
+                  </div>
                 ))}
             </div>
-          ))}
+            );
+          })}
           {!pages.length && <p className="muted">No pages yet.</p>}
           {pages.length > 0 && !pagesBySection.length && (
             <p className="muted">No pages match your search.</p>
