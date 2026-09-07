@@ -976,32 +976,6 @@ button:disabled {
   min-height: 150px;
 }
 
-.relationship-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(150px, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 14px;
-  border: 1px solid #c7d9ca;
-  background: #f7fbf6;
-}
-
-.relationship-summary div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.relationship-summary span {
-  color: var(--muted);
-  font: 11px 'DM Mono', monospace;
-  text-transform: uppercase;
-}
-
-.relationship-summary strong {
-  overflow-wrap: anywhere;
-}
-
 .question-form-heading {
   display: flex;
   align-items: center;
@@ -1054,10 +1028,6 @@ button:disabled {
 
   .inspector-actions {
     justify-content: start;
-  }
-
-  .relationship-summary {
-    grid-template-columns: 1fr;
   }
 
   .question-form {

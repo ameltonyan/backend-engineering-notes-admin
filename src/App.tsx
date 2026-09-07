@@ -276,9 +276,6 @@ function App() {
   const selectedSiblingIndex = selectedQuestion
     ? selectedSiblings.findIndex((question) => question.id === selectedQuestion.id)
     : -1;
-  const formParent = questionForm.parentQuestionId
-    ? questionById.get(questionForm.parentQuestionId)
-    : undefined;
   const matchesQuestionSearch = (question: Question) =>
     !normalizedQuestionSearch || [question.question, question.answer].some((value) =>
       value.toLowerCase().includes(normalizedQuestionSearch),
@@ -443,6 +440,13 @@ function App() {
             aria-expanded={children.length ? isExpanded : undefined}
             aria-label={children.length ? `${isExpanded ? "Collapse" : "Expand"} ${question.question}` : question.question}
             onClick={() => {
+              if (isSelected) {
+                setSelectedQuestionId(null);
+                setIsQuestionFormOpen(false);
+                setEditingQuestionId(null);
+                setIsAiPanelOpen(false);
+                return;
+              }
               setIsQuestionFormOpen(false);
               setEditingQuestionId(null);
               setIsAiPanelOpen(false);
@@ -1086,11 +1090,6 @@ function App() {
                       Close
                     </button>
                   </div>
-                  <div className="relationship-summary">
-                    <div><span>Parent</span><strong>{formParent ? `“${formParent.question}”` : "None — Main question"}</strong></div>
-                    <div><span>Level</span><strong>{formParent ? `${formParent.depth + 1} — ${questionKind(formParent.depth + 1)}` : "0 — Main question"}</strong></div>
-                    <div><span>Insertion</span><strong>{questionForm.parentQuestionId ? "After this parent's existing follow-ups" : "Among the main questions"}</strong></div>
-                  </div>
                   <label>
                     Question
                     <input
@@ -1121,27 +1120,6 @@ function App() {
                       }}
                       required
                     />
-                  </label>
-                  <label>
-                    Parent question
-                    <select
-                      value={questionForm.parentQuestionId ?? ""}
-                      onChange={(event) =>
-                        setQuestionForm({
-                          ...questionForm,
-                          parentQuestionId: event.target.value ? Number(event.target.value) : null,
-                        })
-                      }
-                    >
-                      <option value="">Main question</option>
-                      {orderedQuestions
-                        .filter((question) => question.id !== editingQuestionId)
-                        .map((question) => (
-                          <option value={question.id} key={question.id}>
-                            {questionKind(question.depth)} · Level {question.depth} · {question.question}
-                          </option>
-                        ))}
-                    </select>
                   </label>
                   <label>
                     Order
