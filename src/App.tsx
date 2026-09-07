@@ -37,6 +37,7 @@ type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
 type AiGenerationMode = "main" | "follow-up";
 type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
+type GeneratedTopicSection = { title: string; description: string };
 type AiUsage = {
   promptTokens?: number;
   completionTokens?: number;
@@ -201,6 +202,19 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [topicPlanSection, setTopicPlanSection] = useState<Section | null>(null);
+  const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
+  const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
+    "Core knowledge",
+    "Internals",
+    "Performance",
+    "Production scenarios",
+    "Troubleshooting",
+  ]);
+  const [topicPlanCount, setTopicPlanCount] = useState(10);
+  const [generatedTopicSections, setGeneratedTopicSections] = useState<GeneratedTopicSection[]>([]);
+  const [selectedTopicSectionIndexes, setSelectedTopicSectionIndexes] = useState<number[]>([]);
+  const [topicPlanLoading, setTopicPlanLoading] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
 
   const getErrorMessage = (err: unknown) =>
@@ -422,6 +436,107 @@ function App() {
       scrollToSection("ai-assist");
       document.getElementById("ai-idea")?.focus();
     });
+  };
+
+  const openTopicPlan = (section: Section) => {
+    setTopicPlanSection(section);
+    setGeneratedTopicSections([]);
+    setSelectedTopicSectionIndexes([]);
+    setError("");
+    setNotice("");
+    window.requestAnimationFrame(() => {
+      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const generateTopicPlan = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!topicPlanSection) return;
+    if (!topicPlanFocuses.length) {
+      setError("Select at least one interview focus.");
+      return;
+    }
+    setError("");
+    setTopicPlanLoading(true);
+    try {
+      const result = (await request("/api/admin/ai/topic-plans/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          topic: topicPlanSection.name,
+          targetRole: topicPlanTargetRole.trim(),
+          focuses: topicPlanFocuses,
+          sectionCount: topicPlanCount,
+        }),
+      }, undefined, 180_000)) as { sections: GeneratedTopicSection[]; usage?: AiUsage };
+      setGeneratedTopicSections(result.sections);
+      setSelectedTopicSectionIndexes(result.sections.map((_, index) => index));
+      setAiUsage(result.usage ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setTopicPlanLoading(false);
+    }
+  };
+
+  const moveTopicPlanCandidate = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= generatedTopicSections.length) return;
+    setGeneratedTopicSections((current) => {
+      const reordered = [...current];
+      const [candidate] = reordered.splice(index, 1);
+      reordered.splice(targetIndex, 0, candidate);
+      return reordered;
+    });
+    setSelectedTopicSectionIndexes((current) => current.map((selectedIndex) => {
+      if (selectedIndex === index) return targetIndex;
+      if (selectedIndex === targetIndex) return index;
+      return selectedIndex;
+    }));
+  };
+
+  const removeTopicPlanCandidate = (index: number) => {
+    setGeneratedTopicSections((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
+    setSelectedTopicSectionIndexes((current) => current
+      .filter((selectedIndex) => selectedIndex !== index)
+      .map((selectedIndex) => selectedIndex > index ? selectedIndex - 1 : selectedIndex));
+  };
+
+  const saveTopicPlan = async () => {
+    if (!topicPlanSection || !selectedTopicSectionIndexes.length) return;
+    const selectedCandidates = selectedTopicSectionIndexes.map((index) => generatedTopicSections[index]);
+    const existingSlugs = new Set(pages.map((item) => item.slug));
+    setLoading(true);
+    setError("");
+    try {
+      for (const [index, candidate] of selectedCandidates.entries()) {
+        const baseSlug = generateSlug(topicPlanSection.name, candidate.title);
+        let slug = baseSlug;
+        let suffix = 2;
+        while (existingSlugs.has(slug)) {
+          slug = `${baseSlug}-${suffix}`;
+          suffix += 1;
+        }
+        existingSlugs.add(slug);
+        await request("/api/admin/pages", {
+          method: "POST",
+          body: JSON.stringify({
+            slug,
+            title: candidate.title.trim(),
+            sectionId: topicPlanSection.id,
+            displayOrder: pages.filter((item) => item.section === topicPlanSection.name).length + index,
+          }),
+        });
+      }
+      await loadPages();
+      setNotice(`${selectedCandidates.length} plan section${selectedCandidates.length === 1 ? "" : "s"} created`);
+      setTopicPlanSection(null);
+      setGeneratedTopicSections([]);
+      setSelectedTopicSectionIndexes([]);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const improveQuestionWithAi = (question: Question) => {
@@ -952,9 +1067,10 @@ function App() {
                   <span className="section-count">{sectionPages.length}</span>
                 </button>
                 {currentSection && (
-                  <div className="section-order-actions" aria-label={`Change ${section} section order`}>
+                  <div className="section-order-actions" aria-label={`Manage ${section} section`}>
                     <button type="button" aria-label={`Move ${section} up`} title="Move section up" disabled={sectionIndex <= 0 || loading} onClick={() => moveSection(currentSection.id, -1)}>↑</button>
                     <button type="button" aria-label={`Move ${section} down`} title="Move section down" disabled={sectionIndex >= sections.length - 1 || loading} onClick={() => moveSection(currentSection.id, 1)}>↓</button>
+                    <button type="button" aria-label={`Generate a plan for ${section}`} title="Generate topic plan with AI" disabled={loading} onClick={() => openTopicPlan(currentSection)}>✦</button>
                   </div>
                 )}
               </div>
@@ -1103,6 +1219,79 @@ function App() {
               </button>
             </div>
           </form>
+          {topicPlanSection && (
+            <section className="topic-plan" id="topic-plan" aria-label={`Generate a plan for ${topicPlanSection.name}`}>
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">AI assist</p>
+                  <h3>Generate topic plan</h3>
+                  <span>{topicPlanSection.name} · proposals remain unpublished until you create the selected sections</span>
+                </div>
+              </div>
+              <form className="topic-plan-form" onSubmit={generateTopicPlan}>
+                <label>
+                  Target
+                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} required />
+                </label>
+                <fieldset className="focus-options">
+                  <legend>Interview focus</legend>
+                  {["Core knowledge", "Internals", "Performance", "Production scenarios", "Troubleshooting"].map((focus) => (
+                    <label key={focus}>
+                      <input
+                        type="checkbox"
+                        checked={topicPlanFocuses.includes(focus)}
+                        onChange={() => setTopicPlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
+                      />
+                      {focus}
+                    </label>
+                  ))}
+                </fieldset>
+                <label>
+                  Number of sections
+                  <select value={topicPlanCount} onChange={(event) => setTopicPlanCount(Number(event.target.value))}>
+                    <option value={8}>8</option>
+                    <option value={10}>10</option>
+                    <option value={12}>12</option>
+                    <option value={15}>15</option>
+                  </select>
+                </label>
+                <div className="actions question-form-actions">
+                  <button className="primary" type="submit" disabled={topicPlanLoading}>{topicPlanLoading ? "Generating..." : "Generate plan with AI"}</button>
+                  <button type="button" disabled={topicPlanLoading} onClick={() => { setTopicPlanSection(null); setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Cancel</button>
+                </div>
+              </form>
+              {generatedTopicSections.length > 0 && (
+                <div className="topic-plan-candidates">
+                  <div className="generated-heading">
+                    <h4>Suggested sections</h4>
+                    {aiUsage?.totalTokens !== undefined && <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>}
+                  </div>
+                  <p className="field-hint">Edit, select, and order these proposals before creating normal sections for this topic.</p>
+                  {generatedTopicSections.map((candidate, index) => (
+                    <article className="topic-plan-candidate" key={`${candidate.title}-${index}`}>
+                      <div className="topic-plan-candidate-heading">
+                        <label className="generated-select">
+                          <input type="checkbox" checked={selectedTopicSectionIndexes.includes(index)} onChange={() => setSelectedTopicSectionIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
+                          <span className="eyebrow">Section {index + 1}</span>
+                        </label>
+                        <div className="plan-candidate-actions" aria-label={`Manage suggested section ${index + 1}`}>
+                          <button type="button" aria-label="Move section up" title="Move up" disabled={index === 0} onClick={() => moveTopicPlanCandidate(index, -1)}>↑</button>
+                          <button type="button" aria-label="Move section down" title="Move down" disabled={index === generatedTopicSections.length - 1} onClick={() => moveTopicPlanCandidate(index, 1)}>↓</button>
+                          <button type="button" title="Remove suggestion" onClick={() => removeTopicPlanCandidate(index)}>Remove</button>
+                        </div>
+                      </div>
+                      <label>Title<input value={candidate.title} onChange={(event) => setGeneratedTopicSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
+                      <label>Description<textarea rows={2} value={candidate.description} onChange={(event) => setGeneratedTopicSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
+                    </article>
+                  ))}
+                  <div className="actions question-form-actions">
+                    <button className="primary" type="button" disabled={!selectedTopicSectionIndexes.length || loading} onClick={saveTopicPlan}>Create selected sections</button>
+                    <button type="button" disabled={loading} onClick={() => { setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Discard suggestions</button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
           {page && (
             <>
               <div className="interview-heading">
