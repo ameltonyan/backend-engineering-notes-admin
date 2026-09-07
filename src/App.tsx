@@ -1080,15 +1080,6 @@ function App() {
                       <p className="eyebrow">{editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
                       <h3>{editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuestionFormOpen(false);
-                        setEditingQuestionId(null);
-                      }}
-                    >
-                      Close
-                    </button>
                   </div>
                   <label>
                     Question
@@ -1136,7 +1127,7 @@ function App() {
                       required
                     />
                   </label>
-                  <div className="actions">
+                  <div className="actions question-form-actions">
                     <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
                     </button>
@@ -1171,17 +1162,6 @@ function App() {
                     <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : "Generate main-question candidates"}</h3>
                     <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : "Candidates will be created as main questions"}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAiPanelOpen(false);
-                      setGeneratedQuestions([]);
-                      setMergedQuestion(null);
-                      setSelectedGeneratedIndexes([]);
-                    }}
-                  >
-                    Cancel
-                  </button>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
                   <label>
@@ -1225,9 +1205,21 @@ function App() {
                       </select>
                     </label>
                   </div>
-                  <div className="actions">
+                  <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={aiLoading}>
                       {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : "Generate main questions with AI"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={aiLoading}
+                      onClick={() => {
+                        setIsAiPanelOpen(false);
+                        setGeneratedQuestions([]);
+                        setMergedQuestion(null);
+                        setSelectedGeneratedIndexes([]);
+                      }}
+                    >
+                      Cancel
                     </button>
                   </div>
                 </form>

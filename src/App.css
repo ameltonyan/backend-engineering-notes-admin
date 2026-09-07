@@ -991,6 +991,10 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.question-form-actions {
+  justify-content: flex-end;
+}
+
 @media (max-width: 850px) {
   .workspace {
     grid-template-columns: 1fr;
