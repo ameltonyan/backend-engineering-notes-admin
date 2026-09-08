@@ -160,6 +160,8 @@ function App() {
   const [password, setPassword] = useState("");
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [editingSectionId, setEditingSectionId] = useState<number | null>(null);
+  const [editingSectionName, setEditingSectionName] = useState("");
   const [selectedSlug, setSelectedSlug] = useState("");
   const [page, setPage] = useState<Page | null>(null);
   const [pageForm, setPageForm] = useState<PageForm>({
@@ -202,7 +204,10 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
   const [topicPlanSection, setTopicPlanSection] = useState<Section | null>(null);
+  const [topicPlanTopic, setTopicPlanTopic] = useState("");
+  const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
   const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
   const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
     "Core knowledge",
@@ -439,7 +444,9 @@ function App() {
   };
 
   const openTopicPlan = (section: Section) => {
+    setIsTopicPlanOpen(true);
     setTopicPlanSection(section);
+    setTopicPlanTopic(section.name);
     setGeneratedTopicSections([]);
     setSelectedTopicSectionIndexes([]);
     setError("");
@@ -449,9 +456,38 @@ function App() {
     });
   };
 
+  const closeTopicPlan = () => {
+    if (topicPlanLoading || loading) return;
+    setIsTopicPlanOpen(false);
+    setTopicPlanSection(null);
+    setTopicPlanTopic("");
+    setTopicPlanGuidance("");
+    setGeneratedTopicSections([]);
+    setSelectedTopicSectionIndexes([]);
+  };
+
+  const openNewTopicPlan = () => {
+    setIsTopicPlanOpen(true);
+    setTopicPlanSection(null);
+    setPage(null);
+    setTopicPlanTopic("");
+    setGeneratedTopicSections([]);
+    setSelectedTopicSectionIndexes([]);
+    setError("");
+    setNotice("");
+    window.requestAnimationFrame(() => {
+      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("topic-plan-topic")?.focus();
+    });
+  };
+
   const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
-    if (!topicPlanSection) return;
+    const topic = topicPlanTopic.trim();
+    if (!topic) {
+      setError("Enter a topic for the plan.");
+      return;
+    }
     if (!topicPlanFocuses.length) {
       setError("Select at least one interview focus.");
       return;
@@ -462,10 +498,15 @@ function App() {
       const result = (await request("/api/admin/ai/topic-plans/generate", {
         method: "POST",
         body: JSON.stringify({
-          topic: topicPlanSection.name,
+          topic,
           targetRole: topicPlanTargetRole.trim(),
           focuses: topicPlanFocuses,
           sectionCount: topicPlanCount,
+          additionalGuidance: topicPlanGuidance.trim() || null,
+          existingPageTitles: pages
+            .filter((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topic).toLowerCase())
+            .map((item) => item.title)
+            .slice(0, 50),
         }),
       }, undefined, 180_000)) as { sections: GeneratedTopicSection[]; usage?: AiUsage };
       setGeneratedTopicSections(result.sections);
@@ -502,14 +543,23 @@ function App() {
   };
 
   const saveTopicPlan = async () => {
-    if (!topicPlanSection || !selectedTopicSectionIndexes.length) return;
+    if (!topicPlanTopic.trim() || !selectedTopicSectionIndexes.length) return;
     const selectedCandidates = selectedTopicSectionIndexes.map((index) => generatedTopicSections[index]);
     const existingSlugs = new Set(pages.map((item) => item.slug));
     setLoading(true);
     setError("");
     try {
+      let section = topicPlanSection ?? await getOrCreateSection(topicPlanTopic);
+      if (topicPlanSection && section.name.trim().toLowerCase() !== topicPlanTopic.trim().toLowerCase()) {
+        section = (await request(`/api/admin/sections/${section.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name: topicPlanTopic.trim() }),
+        })) as Section;
+        setSections((current) => current.map((item) => item.id === section.id ? section : item));
+      }
+      const sectionPageCount = pages.filter((item) => item.section === section.name).length;
       for (const [index, candidate] of selectedCandidates.entries()) {
-        const baseSlug = generateSlug(topicPlanSection.name, candidate.title);
+        const baseSlug = generateSlug(section.name, candidate.title);
         let slug = baseSlug;
         let suffix = 2;
         while (existingSlugs.has(slug)) {
@@ -522,14 +572,17 @@ function App() {
           body: JSON.stringify({
             slug,
             title: candidate.title.trim(),
-            sectionId: topicPlanSection.id,
-            displayOrder: pages.filter((item) => item.section === topicPlanSection.name).length + index,
+            sectionId: section.id,
+            displayOrder: sectionPageCount + index,
           }),
         });
       }
       await loadPages();
       setNotice(`${selectedCandidates.length} plan section${selectedCandidates.length === 1 ? "" : "s"} created`);
+      setIsTopicPlanOpen(false);
       setTopicPlanSection(null);
+      setTopicPlanTopic("");
+      setTopicPlanGuidance("");
       setGeneratedTopicSections([]);
       setSelectedTopicSectionIndexes([]);
     } catch (err) {
@@ -910,6 +963,46 @@ function App() {
     }
   };
 
+  const startSectionEdit = (section: Section) => {
+    closeTopicPlan();
+    setEditingSectionId(section.id);
+    setEditingSectionName(section.name);
+    setError("");
+  };
+
+  const cancelSectionEdit = () => {
+    setEditingSectionId(null);
+    setEditingSectionName("");
+  };
+
+  const saveSectionEdit = async (section: Section) => {
+    const name = editingSectionName.trim();
+    if (!name) {
+      setError("Section name cannot be empty.");
+      return;
+    }
+    if (name.toLowerCase() === section.name.toLowerCase()) {
+      cancelSectionEdit();
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/api/admin/sections/${section.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name }),
+      });
+      await Promise.all([loadSections(), loadPages()]);
+      cancelSectionEdit();
+      setNotice("Section renamed");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const movePage = async (sectionId: number, sectionPages: PageSummary[], slug: string, direction: -1 | 1) => {
     const currentIndex = sectionPages.findIndex((item) => item.slug === slug);
     const targetIndex = currentIndex + direction;
@@ -1023,6 +1116,7 @@ function App() {
             <button
               type="button"
               onClick={() => {
+                closeTopicPlan();
                 setPage(null);
                 setSelectedSlug("");
                 setSlugWasEdited(false);
@@ -1035,6 +1129,9 @@ function App() {
               }}
             >
               New page
+            </button>
+            <button type="button" onClick={openNewTopicPlan} disabled={loading}>
+              Generate topic plan
             </button>
           </div>
           <label className="search-field">
@@ -1052,22 +1149,45 @@ function App() {
             return (
             <div className="page-section-group" key={section}>
               <div className="section-heading-row">
-                <button
-                  className="section-toggle"
-                  type="button"
-                  aria-expanded={!collapsedSections[section]}
-                  onClick={() =>
-                    setCollapsedSections((current) => ({
-                      ...current,
-                      [section]: !current[section],
-                    }))
-                  }
-                >
-                  <span className="page-section-title">{section}</span>
-                  <span className="section-count">{sectionPages.length}</span>
-                </button>
+                {currentSection && editingSectionId === currentSection.id ? (
+                  <div className="section-edit-fields">
+                    <input
+                      aria-label={`Edit ${section} section name`}
+                      value={editingSectionName}
+                      maxLength={100}
+                      onChange={(event) => setEditingSectionName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void saveSectionEdit(currentSection);
+                        }
+                        if (event.key === "Escape") cancelSectionEdit();
+                      }}
+                      autoFocus
+                    />
+                    <button type="button" className="primary" disabled={loading} onClick={() => void saveSectionEdit(currentSection)}>Save</button>
+                    <button type="button" disabled={loading} onClick={cancelSectionEdit}>Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    className="section-toggle"
+                    type="button"
+                    aria-expanded={!collapsedSections[section]}
+                    onClick={() => {
+                      closeTopicPlan();
+                      setCollapsedSections((current) => ({
+                        ...current,
+                        [section]: !current[section],
+                      }));
+                    }}
+                  >
+                    <span className="page-section-title">{section}</span>
+                    <span className="section-count">{sectionPages.length}</span>
+                  </button>
+                )}
                 {currentSection && (
                   <div className="section-order-actions" aria-label={`Manage ${section} section`}>
+                    {editingSectionId !== currentSection.id && <button type="button" aria-label={`Edit ${section} section`} title="Edit section name" disabled={loading} onClick={() => startSectionEdit(currentSection)}>Edit</button>}
                     <button type="button" aria-label={`Move ${section} up`} title="Move section up" disabled={sectionIndex <= 0 || loading} onClick={() => moveSection(currentSection.id, -1)}>↑</button>
                     <button type="button" aria-label={`Move ${section} down`} title="Move section down" disabled={sectionIndex >= sections.length - 1 || loading} onClick={() => moveSection(currentSection.id, 1)}>↓</button>
                     <button type="button" aria-label={`Generate a plan for ${section}`} title="Generate topic plan with AI" disabled={loading} onClick={() => openTopicPlan(currentSection)}>✦</button>
@@ -1077,7 +1197,7 @@ function App() {
               {!collapsedSections[section] &&
                 sectionPages.map((item, pageIndex) => (
                   <div className={item.slug === selectedSlug ? "page-item active" : "page-item"} key={item.slug}>
-                    <button type="button" className="page-select" onClick={() => setSelectedSlug(item.slug)}>
+                    <button type="button" className="page-select" onClick={() => { closeTopicPlan(); setSelectedSlug(item.slug); }}>
                       <strong>{item.title}</strong>
                       <span>{item.slug}</span>
                     </button>
@@ -1219,20 +1339,40 @@ function App() {
               </button>
             </div>
           </form>
-          {topicPlanSection && (
-            <section className="topic-plan" id="topic-plan" aria-label={`Generate a plan for ${topicPlanSection.name}`}>
+          {isTopicPlanOpen && (
+            <section className="topic-plan" id="topic-plan" aria-label={`Generate a plan for ${topicPlanTopic || "a new topic"}`}>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">AI assist</p>
                   <h3>Generate topic plan</h3>
-                  <span>{topicPlanSection.name} · proposals remain unpublished until you create the selected sections</span>
+                  <span>{topicPlanSection ? `${topicPlanSection.name} · ` : "Start with a new topic · "}proposals remain unpublished until you create the selected sections</span>
                 </div>
               </div>
               <form className="topic-plan-form" onSubmit={generateTopicPlan}>
                 <label>
+                  Topic / section name
+                  <input id="topic-plan-topic" value={topicPlanTopic} onChange={(event) => setTopicPlanTopic(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
+                  <small className="field-hint">You can rename this section before creating the selected pages.</small>
+                </label>
+                <label>
                   Target
                   <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} required />
                 </label>
+                <label>
+                  Additional guidance
+                  <textarea
+                    rows={3}
+                    value={topicPlanGuidance}
+                    onChange={(event) => setTopicPlanGuidance(event.target.value)}
+                    placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
+                  />
+                </label>
+                {topicPlanTopic.trim() && pages.some((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()) && (
+                  <div className="topic-plan-existing">
+                    <span className="field-label">Existing pages included as context</span>
+                    <p>{pages.filter((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()).map((item) => item.title).join(" · ")}</p>
+                  </div>
+                )}
                 <fieldset className="focus-options">
                   <legend>Interview focus</legend>
                   {["Core knowledge", "Internals", "Performance", "Production scenarios", "Troubleshooting"].map((focus) => (
@@ -1249,6 +1389,11 @@ function App() {
                 <label>
                   Number of sections
                   <select value={topicPlanCount} onChange={(event) => setTopicPlanCount(Number(event.target.value))}>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                    <option value={6}>6</option>
                     <option value={8}>8</option>
                     <option value={10}>10</option>
                     <option value={12}>12</option>
@@ -1257,7 +1402,7 @@ function App() {
                 </label>
                 <div className="actions question-form-actions">
                   <button className="primary" type="submit" disabled={topicPlanLoading}>{topicPlanLoading ? "Generating..." : "Generate plan with AI"}</button>
-                  <button type="button" disabled={topicPlanLoading} onClick={() => { setTopicPlanSection(null); setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Cancel</button>
+                  <button type="button" disabled={topicPlanLoading} onClick={closeTopicPlan}>Cancel</button>
                 </div>
               </form>
               {generatedTopicSections.length > 0 && (

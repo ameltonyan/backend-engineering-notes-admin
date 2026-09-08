@@ -360,7 +360,7 @@ input:disabled {
 
 .section-heading-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
 }
 
@@ -373,6 +373,7 @@ input:disabled {
 }
 
 .section-toggle {
+  min-width: 0;
   width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 32px 24px;
@@ -382,6 +383,26 @@ input:disabled {
   border: 0;
   background: transparent;
   text-align: left;
+}
+
+.section-edit-fields {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-edit-fields input {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 8px;
+}
+
+.section-edit-fields button {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  font-size: 12px;
 }
 
 .section-toggle:hover {
@@ -398,6 +419,7 @@ input:disabled {
 
 .section-toggle .page-section-title {
   margin-bottom: 0;
+  overflow-wrap: anywhere;
 }
 
 .section-toggle .section-count {
@@ -411,11 +433,11 @@ input:disabled {
 
 .section-order-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 2px;
 }
 
 .section-order-actions button {
-  width: 26px;
   min-width: 26px;
   padding: 4px 0;
   border-color: transparent;
@@ -438,7 +460,26 @@ input:disabled {
 }
 
 .topic-plan .section-heading {
+  align-items: flex-start;
   border-bottom: 0;
+}
+
+.topic-plan .section-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.topic-plan .section-heading h3,
+.topic-plan .section-heading span {
+  overflow-wrap: anywhere;
+}
+
+.topic-plan .section-heading span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .topic-plan-form,
