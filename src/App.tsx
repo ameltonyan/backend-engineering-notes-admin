@@ -64,9 +64,34 @@ const apiBaseUrl = (
   import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:8080"
 ).replace(/\/$/, "");
 const credentialsKey = "backend-engineering-notes-admin:credentials";
+const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
+const aiLoadingMessages = [
+  "Consulting the silicon oracle.",
+  "Teaching the model the difference between a plan and a pile of topics.",
+  "Negotiating with several billion parameters.",
+  "Checking whether the answer is insightful or merely confident.",
+  "Almost done. The machine is having a small existential crisis.",
+];
 
 function readCredentials() {
   return sessionStorage.getItem(credentialsKey) || "";
+}
+
+function readCollapsedSections(): Record<string, boolean> {
+  const stored = localStorage.getItem(collapsedSectionsKey);
+  if (!stored) return {};
+
+  try {
+    const parsed = JSON.parse(stored) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([section, collapsed]) =>
+        Boolean(section) && typeof collapsed === "boolean",
+      ),
+    );
+  } catch {
+    return {};
+  }
 }
 
 function generateSlug(section: string, title: string) {
@@ -160,6 +185,7 @@ function App() {
   const [password, setPassword] = useState("");
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [page, setPage] = useState<Page | null>(null);
   const [pageForm, setPageForm] = useState<PageForm>({
@@ -182,7 +208,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [slugWasEdited, setSlugWasEdited] = useState(false);
   const [pageSearch, setPageSearch] = useState("");
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(readCollapsedSections);
   const [questionSearch, setQuestionSearch] = useState("");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
@@ -202,7 +228,10 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
   const [topicPlanSection, setTopicPlanSection] = useState<Section | null>(null);
+  const [topicPlanTopic, setTopicPlanTopic] = useState("");
+  const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
   const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
   const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
     "Core knowledge",
@@ -215,10 +244,26 @@ function App() {
   const [generatedTopicSections, setGeneratedTopicSections] = useState<GeneratedTopicSection[]>([]);
   const [selectedTopicSectionIndexes, setSelectedTopicSectionIndexes] = useState<number[]>([]);
   const [topicPlanLoading, setTopicPlanLoading] = useState(false);
+  const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
   const aiPanelRef = useRef<HTMLElement | null>(null);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
+  const isAiBusy = aiLoading || topicPlanLoading;
+
+  useEffect(() => {
+    if (!isAiBusy) {
+      setAiLoadingMessage(aiLoadingMessages[0]);
+      return;
+    }
+    let messageIndex = 0;
+    setAiLoadingMessage(aiLoadingMessages[messageIndex]);
+    const intervalId = window.setInterval(() => {
+      messageIndex = (messageIndex + 1) % aiLoadingMessages.length;
+      setAiLoadingMessage(aiLoadingMessages[messageIndex]);
+    }, 3500);
+    return () => window.clearInterval(intervalId);
+  }, [isAiBusy]);
 
   useEffect(() => {
     if (!notice) return;
@@ -226,6 +271,10 @@ function App() {
     const timeoutId = window.setTimeout(() => setNotice(""), 4000);
     return () => window.clearTimeout(timeoutId);
   }, [notice]);
+
+  useEffect(() => {
+    localStorage.setItem(collapsedSectionsKey, JSON.stringify(collapsedSections));
+  }, [collapsedSections]);
 
   useEffect(() => {
     if (!deleteConfirmation) return;
@@ -439,7 +488,9 @@ function App() {
   };
 
   const openTopicPlan = (section: Section) => {
+    setIsTopicPlanOpen(true);
     setTopicPlanSection(section);
+    setTopicPlanTopic(section.name);
     setGeneratedTopicSections([]);
     setSelectedTopicSectionIndexes([]);
     setError("");
@@ -449,9 +500,52 @@ function App() {
     });
   };
 
+  const closeTopicPlan = () => {
+    if (topicPlanLoading || loading) return;
+    setIsTopicPlanOpen(false);
+    setTopicPlanSection(null);
+    setTopicPlanTopic("");
+    setTopicPlanGuidance("");
+    setGeneratedTopicSections([]);
+    setSelectedTopicSectionIndexes([]);
+  };
+
+  const openNewPage = () => {
+    closeTopicPlan();
+    setIsCreateMenuOpen(false);
+    setPage(null);
+    setSelectedSlug("");
+    setSlugWasEdited(false);
+    setPageForm({
+      slug: "",
+      title: "",
+      section: "",
+      displayOrder: pages.length,
+    });
+  };
+
+  const openNewTopicPlan = () => {
+    setIsTopicPlanOpen(true);
+    setTopicPlanSection(null);
+    setPage(null);
+    setTopicPlanTopic("");
+    setGeneratedTopicSections([]);
+    setSelectedTopicSectionIndexes([]);
+    setError("");
+    setNotice("");
+    window.requestAnimationFrame(() => {
+      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("topic-plan-topic")?.focus();
+    });
+  };
+
   const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
-    if (!topicPlanSection) return;
+    const topic = topicPlanTopic.trim();
+    if (!topic) {
+      setError("Enter a topic for the plan.");
+      return;
+    }
     if (!topicPlanFocuses.length) {
       setError("Select at least one interview focus.");
       return;
@@ -462,10 +556,15 @@ function App() {
       const result = (await request("/api/admin/ai/topic-plans/generate", {
         method: "POST",
         body: JSON.stringify({
-          topic: topicPlanSection.name,
+          topic,
           targetRole: topicPlanTargetRole.trim(),
           focuses: topicPlanFocuses,
           sectionCount: topicPlanCount,
+          additionalGuidance: topicPlanGuidance.trim() || null,
+          existingPageTitles: pages
+            .filter((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topic).toLowerCase())
+            .map((item) => item.title)
+            .slice(0, 50),
         }),
       }, undefined, 180_000)) as { sections: GeneratedTopicSection[]; usage?: AiUsage };
       setGeneratedTopicSections(result.sections);
@@ -502,14 +601,23 @@ function App() {
   };
 
   const saveTopicPlan = async () => {
-    if (!topicPlanSection || !selectedTopicSectionIndexes.length) return;
+    if (!topicPlanTopic.trim() || !selectedTopicSectionIndexes.length) return;
     const selectedCandidates = selectedTopicSectionIndexes.map((index) => generatedTopicSections[index]);
     const existingSlugs = new Set(pages.map((item) => item.slug));
     setLoading(true);
     setError("");
     try {
+      let section = topicPlanSection ?? await getOrCreateSection(topicPlanTopic);
+      if (topicPlanSection && section.name.trim().toLowerCase() !== topicPlanTopic.trim().toLowerCase()) {
+        section = (await request(`/api/admin/sections/${section.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name: topicPlanTopic.trim() }),
+        })) as Section;
+        setSections((current) => current.map((item) => item.id === section.id ? section : item));
+      }
+      const sectionPageCount = pages.filter((item) => item.section === section.name).length;
       for (const [index, candidate] of selectedCandidates.entries()) {
-        const baseSlug = generateSlug(topicPlanSection.name, candidate.title);
+        const baseSlug = generateSlug(section.name, candidate.title);
         let slug = baseSlug;
         let suffix = 2;
         while (existingSlugs.has(slug)) {
@@ -522,14 +630,17 @@ function App() {
           body: JSON.stringify({
             slug,
             title: candidate.title.trim(),
-            sectionId: topicPlanSection.id,
-            displayOrder: pages.filter((item) => item.section === topicPlanSection.name).length + index,
+            sectionId: section.id,
+            displayOrder: sectionPageCount + index,
           }),
         });
       }
       await loadPages();
       setNotice(`${selectedCandidates.length} plan section${selectedCandidates.length === 1 ? "" : "s"} created`);
+      setIsTopicPlanOpen(false);
       setTopicPlanSection(null);
+      setTopicPlanTopic("");
+      setTopicPlanGuidance("");
       setGeneratedTopicSections([]);
       setSelectedTopicSectionIndexes([]);
     } catch (err) {
@@ -621,7 +732,7 @@ function App() {
               <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
+              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
             </div>
           </section>
@@ -1013,6 +1124,22 @@ function App() {
           Sign out
         </button>
       </header>
+      {isAiBusy && (
+        <div className="ai-loading-overlay" role="status" aria-live="polite" aria-label="AI request in progress">
+          <div className="ai-loading-card">
+            <div className="ai-loading-mark" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <p className="eyebrow">AI assist is thinking</p>
+            <h2>{topicPlanLoading ? "Building your topic plan" : "Drafting interview material"}</h2>
+            <p className="ai-loading-message">{aiLoadingMessage}</p>
+            <div className="ai-loading-track" aria-hidden="true"><span /></div>
+            <small>This can take a little while for reasoning-heavy requests. Please keep this tab open.</small>
+          </div>
+        </div>
+      )}
       <div className="workspace">
         <aside className="page-list">
           <div className="list-heading">
@@ -1020,22 +1147,23 @@ function App() {
               <h2>Topics &amp; sections</h2>
               <span className="list-count">{pages.length} total</span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setPage(null);
-                setSelectedSlug("");
-                setSlugWasEdited(false);
-                setPageForm({
-                  slug: "",
-                  title: "",
-                  section: "",
-                  displayOrder: pages.length,
-                });
-              }}
-            >
-              New page
-            </button>
+            <div className="create-content-actions">
+              <button type="button" onClick={() => setIsCreateMenuOpen((current) => !current)} disabled={loading}>
+                New content
+              </button>
+              {isCreateMenuOpen && (
+                <div className="create-content-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={openNewPage}>
+                    <strong>New page</strong>
+                    <span>Write one page yourself</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setIsCreateMenuOpen(false); openNewTopicPlan(); }}>
+                    <strong>New page with AI</strong>
+                    <span>Generate and review several pages</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <label className="search-field">
             <span>Find a page</span>
@@ -1052,32 +1180,37 @@ function App() {
             return (
             <div className="page-section-group" key={section}>
               <div className="section-heading-row">
-                <button
-                  className="section-toggle"
-                  type="button"
-                  aria-expanded={!collapsedSections[section]}
-                  onClick={() =>
-                    setCollapsedSections((current) => ({
-                      ...current,
-                      [section]: !current[section],
-                    }))
-                  }
-                >
-                  <span className="page-section-title">{section}</span>
-                  <span className="section-count">{sectionPages.length}</span>
-                </button>
+                {currentSection && (
+                  <button
+                    className="section-toggle"
+                    type="button"
+                    title={section}
+                    aria-expanded={!collapsedSections[section]}
+                    onClick={() => {
+                      setIsCreateMenuOpen(false);
+                      closeTopicPlan();
+                      setCollapsedSections((current) => ({
+                        ...current,
+                        [section]: !current[section],
+                      }));
+                    }}
+                  >
+                    <span className="page-section-title">{section}</span>
+                    <span className="section-count">{sectionPages.length}</span>
+                  </button>
+                )}
                 {currentSection && (
                   <div className="section-order-actions" aria-label={`Manage ${section} section`}>
                     <button type="button" aria-label={`Move ${section} up`} title="Move section up" disabled={sectionIndex <= 0 || loading} onClick={() => moveSection(currentSection.id, -1)}>↑</button>
                     <button type="button" aria-label={`Move ${section} down`} title="Move section down" disabled={sectionIndex >= sections.length - 1 || loading} onClick={() => moveSection(currentSection.id, 1)}>↓</button>
-                    <button type="button" aria-label={`Generate a plan for ${section}`} title="Generate topic plan with AI" disabled={loading} onClick={() => openTopicPlan(currentSection)}>✦</button>
+                    <button type="button" aria-label={`Generate pages for ${section}`} title="Generate pages with AI" disabled={loading} onClick={() => openTopicPlan(currentSection)}>✦</button>
                   </div>
                 )}
               </div>
               {!collapsedSections[section] &&
                 sectionPages.map((item, pageIndex) => (
                   <div className={item.slug === selectedSlug ? "page-item active" : "page-item"} key={item.slug}>
-                    <button type="button" className="page-select" onClick={() => setSelectedSlug(item.slug)}>
+                    <button type="button" className="page-select" onClick={() => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(item.slug); }}>
                       <strong>{item.title}</strong>
                       <span>{item.slug}</span>
                     </button>
@@ -1117,22 +1250,23 @@ function App() {
               </button>
             </div>
           )}
-          <div className="editor-heading">
-            <div>
-              <p className="eyebrow">{page ? "Editing page" : "New page"}</p>
-              <h2>{page?.title ?? "Create your first page"}</h2>
+          {!isTopicPlanOpen && <>
+            <div className="editor-heading">
+              <div>
+                <p className="eyebrow">{page ? "Editing page" : "New page"}</p>
+                <h2>{page?.title ?? (pages.length ? "Create a new page" : "Create your first page")}</h2>
+              </div>
+              {page && (
+                <button
+                  className="danger"
+                  type="button"
+                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title })}
+                >
+                  Delete page
+                </button>
+              )}
             </div>
-            {page && (
-              <button
-                className="danger"
-                type="button"
-                onClick={() => setDeleteConfirmation({ type: "page", title: page.title })}
-              >
-                Delete page
-              </button>
-            )}
-          </div>
-          <form className="page-form" onSubmit={handlePageSubmit}>
+            <form className="page-form" onSubmit={handlePageSubmit}>
             <div className="form-fields">
               <label>
                 <span className="field-label">
@@ -1218,21 +1352,42 @@ function App() {
                 {page ? "Save page" : "Create page"}
               </button>
             </div>
-          </form>
-          {topicPlanSection && (
-            <section className="topic-plan" id="topic-plan" aria-label={`Generate a plan for ${topicPlanSection.name}`}>
+            </form>
+          </>}
+          {isTopicPlanOpen && (
+            <section className="topic-plan" id="topic-plan" aria-label={`Create pages with AI for ${topicPlanTopic || "a new topic"}`}>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">AI assist</p>
-                  <h3>Generate topic plan</h3>
-                  <span>{topicPlanSection.name} · proposals remain unpublished until you create the selected sections</span>
+                  <h3>New page with AI</h3>
+                  <span>{topicPlanSection ? `${topicPlanSection.name} · ` : "Start with a new topic · "}proposals remain unpublished until you create the selected pages</span>
                 </div>
               </div>
               <form className="topic-plan-form" onSubmit={generateTopicPlan}>
                 <label>
+                  Topic / section name
+                  <input id="topic-plan-topic" value={topicPlanTopic} onChange={(event) => setTopicPlanTopic(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
+                  <small className="field-hint">You can rename this section before creating the selected pages.</small>
+                </label>
+                <label>
                   Target
                   <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} required />
                 </label>
+                <label>
+                  Additional guidance
+                  <textarea
+                    rows={3}
+                    value={topicPlanGuidance}
+                    onChange={(event) => setTopicPlanGuidance(event.target.value)}
+                    placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
+                  />
+                </label>
+                {topicPlanTopic.trim() && pages.some((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()) && (
+                  <div className="topic-plan-existing">
+                    <span className="field-label">Existing pages included as context</span>
+                    <p>{pages.filter((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()).map((item) => item.title).join(" · ")}</p>
+                  </div>
+                )}
                 <fieldset className="focus-options">
                   <legend>Interview focus</legend>
                   {["Core knowledge", "Internals", "Performance", "Production scenarios", "Troubleshooting"].map((focus) => (
@@ -1249,6 +1404,11 @@ function App() {
                 <label>
                   Number of sections
                   <select value={topicPlanCount} onChange={(event) => setTopicPlanCount(Number(event.target.value))}>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                    <option value={6}>6</option>
                     <option value={8}>8</option>
                     <option value={10}>10</option>
                     <option value={12}>12</option>
@@ -1256,28 +1416,27 @@ function App() {
                   </select>
                 </label>
                 <div className="actions question-form-actions">
-                  <button className="primary" type="submit" disabled={topicPlanLoading}>{topicPlanLoading ? "Generating..." : "Generate plan with AI"}</button>
-                  <button type="button" disabled={topicPlanLoading} onClick={() => { setTopicPlanSection(null); setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Cancel</button>
+                    <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
                 </div>
               </form>
               {generatedTopicSections.length > 0 && (
                 <div className="topic-plan-candidates">
                   <div className="generated-heading">
-                    <h4>Suggested sections</h4>
+                    <h4>Suggested pages</h4>
                     {aiUsage?.totalTokens !== undefined && <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>}
                   </div>
-                  <p className="field-hint">Edit, select, and order these proposals before creating normal sections for this topic.</p>
+                  <p className="field-hint">Edit, select, and order these proposals before creating normal pages for this topic.</p>
                   {generatedTopicSections.map((candidate, index) => (
                     <article className="topic-plan-candidate" key={`${candidate.title}-${index}`}>
                       <div className="topic-plan-candidate-heading">
                         <label className="generated-select">
                           <input type="checkbox" checked={selectedTopicSectionIndexes.includes(index)} onChange={() => setSelectedTopicSectionIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
-                          <span className="eyebrow">Section {index + 1}</span>
+                          <span className="eyebrow">Page {index + 1}</span>
                         </label>
                         <div className="plan-candidate-actions" aria-label={`Manage suggested section ${index + 1}`}>
-                          <button type="button" aria-label="Move section up" title="Move up" disabled={index === 0} onClick={() => moveTopicPlanCandidate(index, -1)}>↑</button>
-                          <button type="button" aria-label="Move section down" title="Move down" disabled={index === generatedTopicSections.length - 1} onClick={() => moveTopicPlanCandidate(index, 1)}>↓</button>
-                          <button type="button" title="Remove suggestion" onClick={() => removeTopicPlanCandidate(index)}>Remove</button>
+                          <button type="button" aria-label="Move page up" title="Move up" disabled={index === 0} onClick={() => moveTopicPlanCandidate(index, -1)}>↑</button>
+                          <button type="button" aria-label="Move page down" title="Move down" disabled={index === generatedTopicSections.length - 1} onClick={() => moveTopicPlanCandidate(index, 1)}>↓</button>
+                          <button type="button" title="Remove page suggestion" onClick={() => removeTopicPlanCandidate(index)}>Remove</button>
                         </div>
                       </div>
                       <label>Title<input value={candidate.title} onChange={(event) => setGeneratedTopicSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
@@ -1285,7 +1444,7 @@ function App() {
                     </article>
                   ))}
                   <div className="actions question-form-actions">
-                    <button className="primary" type="button" disabled={!selectedTopicSectionIndexes.length || loading} onClick={saveTopicPlan}>Create selected sections</button>
+                    <button className="primary" type="button" disabled={!selectedTopicSectionIndexes.length || loading} onClick={saveTopicPlan}>Create selected pages</button>
                     <button type="button" disabled={loading} onClick={() => { setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Discard suggestions</button>
                   </div>
                 </div>
@@ -1301,7 +1460,7 @@ function App() {
                   <span className="interview-context">{page.section} / {page.title} · {page.questions.length} questions · select a node to set the working context</span>
                 </div>
                 <div className="question-actions">
-                  <button className="primary" type="button" onClick={() => focusAiGeneration("main")}>
+                    <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("main")}>
                     Generate main questions with AI
                   </button>
                   <button className="secondary" type="button" onClick={() => startQuestionCreation(null)}>
@@ -1466,12 +1625,12 @@ function App() {
                     </label>
                   </div>
                   <div className="actions question-form-actions">
-                    <button className="primary" type="submit" disabled={aiLoading}>
+                    <button className="primary" type="submit" disabled={isAiBusy}>
                       {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : "Generate main questions with AI"}
                     </button>
                     <button
                       type="button"
-                      disabled={aiLoading}
+                      disabled={isAiBusy}
                       onClick={() => {
                         setIsAiPanelOpen(false);
                         setGeneratedQuestions([]);
@@ -1531,7 +1690,7 @@ function App() {
                       </article>
                     )}
                     <div className="actions generated-actions">
-                      <button type="button" onClick={mergeSelectedQuestions} disabled={aiLoading || selectedGeneratedIndexes.length !== 2}>
+                      <button type="button" onClick={mergeSelectedQuestions} disabled={isAiBusy || selectedGeneratedIndexes.length !== 2}>
                         {aiLoading ? "Merging..." : "Merge selected"}
                       </button>
                       <button
