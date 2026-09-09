@@ -1448,15 +1448,6 @@ function App() {
                 />
               </label>
               <label>
-                Description
-                <textarea
-                  rows={3}
-                  value={pageForm.description}
-                  onChange={(event) => setPageForm({ ...pageForm, description: event.target.value })}
-                />
-                <small className="field-hint">A short summary shown at the top of the public page.</small>
-              </label>
-              <label>
                 Slug
                 <input
                   value={pageForm.slug}
@@ -1488,11 +1479,20 @@ function App() {
                   required
                 />
               </label>
-            </div>
-            <div className="form-actions">
-              <button className="primary" type="submit">
-                {page ? "Save page" : "Create page"}
-              </button>
+              <label className="page-description-field">
+                Description
+                <textarea
+                  rows={2}
+                  value={pageForm.description}
+                  onChange={(event) => setPageForm({ ...pageForm, description: event.target.value })}
+                />
+                <small className="field-hint">A short summary for this page.</small>
+              </label>
+              <div className="form-actions">
+                <button className="primary" type="submit">
+                  {page ? "Save page" : "Create page"}
+                </button>
+              </div>
             </div>
             </form>
           </>}

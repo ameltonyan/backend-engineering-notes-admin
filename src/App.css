@@ -644,7 +644,7 @@ input:disabled {
 .focus-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 4px 12px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -652,7 +652,7 @@ input:disabled {
 
 .focus-options legend {
   width: 100%;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   font-weight: 600;
 }
 
@@ -777,10 +777,15 @@ input:disabled {
   gap: 16px;
 }
 
+.page-description-field {
+  grid-column: 1;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 18px;
+  grid-column: 2 / -1;
+  align-self: start;
 }
 
 .section-heading {
