@@ -69,7 +69,6 @@ button:hover {
 
 .eyebrow,
 .muted,
-.page-item span,
 .section-heading span {
   color: var(--muted);
 }
@@ -698,12 +697,22 @@ input:disabled {
 }
 
 .page-item {
+  position: relative;
   display: flex;
   align-items: stretch;
   width: 100%;
   margin-top: 10px;
   border: 1px solid transparent;
   border-radius: 4px;
+}
+
+.page-item + .page-item::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  left: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .page-item.active {
@@ -713,11 +722,11 @@ input:disabled {
 
 .page-select {
   display: grid;
-  flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
-  padding: 13px;
+  padding: 13px 78px 13px 13px;
   text-align: left;
 }
 
@@ -732,9 +741,12 @@ input:disabled {
 
 .page-order-actions {
   display: flex;
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
   align-items: center;
   gap: 2px;
-  padding-right: 6px;
 }
 
 .page-order-actions button {

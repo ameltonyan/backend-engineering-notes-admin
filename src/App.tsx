@@ -1343,9 +1343,14 @@ function App() {
               {!collapsedSections[section] &&
                 sectionPages.map((item, pageIndex) => (
                   <div className={item.slug === selectedSlug ? "page-item active" : "page-item"} key={item.slug}>
-                    <button type="button" className="page-select" onClick={() => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(item.slug); }}>
+                    <button
+                      type="button"
+                      className="page-select"
+                      title={`Slug: ${item.slug}`}
+                      aria-label={`${item.title}. Slug: ${item.slug}`}
+                      onClick={() => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(item.slug); }}
+                    >
                       <strong>{item.title}</strong>
-                      <span>{item.slug}</span>
                     </button>
                     {item.slug === selectedSlug && currentSection && (
                       <div className="page-order-actions" aria-label={`Change ${item.title} page order`}>
