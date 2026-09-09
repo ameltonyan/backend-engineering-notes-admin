@@ -4,6 +4,7 @@ import "./App.css";
 type PageSummary = {
   slug: string;
   title: string;
+  description: string | null;
   section: string;
   displayOrder: number;
 };
@@ -24,6 +25,7 @@ type Page = PageSummary & { questions: Question[] };
 type PageForm = {
   slug: string;
   title: string;
+  description: string;
   section: string;
   displayOrder: number;
 };
@@ -207,6 +209,7 @@ function App() {
   const [pageForm, setPageForm] = useState<PageForm>({
     slug: "",
     title: "",
+    description: "",
     section: "",
     displayOrder: 0,
   });
@@ -401,6 +404,7 @@ function App() {
     setPageForm({
       slug: loaded.slug,
       title: loaded.title,
+      description: loaded.description ?? "",
       section: loaded.section,
       displayOrder: loaded.displayOrder,
     });
@@ -557,6 +561,7 @@ function App() {
     setPageForm({
       slug: "",
       title: "",
+      description: "",
       section: "",
       displayOrder: pages.length,
     });
@@ -583,6 +588,7 @@ function App() {
   const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
     const topic = topicPlanTopic.trim();
+    const existingPageSection = topicPlanSection?.name ?? topic;
     if (!topic) {
       setError("Enter a topic for the plan.");
       return;
@@ -603,7 +609,7 @@ function App() {
           sectionCount: topicPlanCount,
           additionalGuidance: topicPlanGuidance.trim() || null,
           existingPageTitles: pages
-            .filter((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topic).toLowerCase())
+            .filter((item) => item.section.toLowerCase() === existingPageSection.toLowerCase())
             .map((item) => item.title)
             .slice(0, 50),
         }),
@@ -671,6 +677,7 @@ function App() {
           body: JSON.stringify({
             slug,
             title: candidate.title.trim(),
+            description: candidate.description.trim() || null,
             sectionId: section.id,
             displayOrder: sectionPageCount + index,
           }),
@@ -825,11 +832,13 @@ function App() {
         ? {
             slug: pageForm.slug.trim(),
             title: pageForm.title.trim(),
+            description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
           }
         : {
             title: pageForm.title.trim(),
+            description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
           };
@@ -1439,6 +1448,15 @@ function App() {
                 />
               </label>
               <label>
+                Description
+                <textarea
+                  rows={3}
+                  value={pageForm.description}
+                  onChange={(event) => setPageForm({ ...pageForm, description: event.target.value })}
+                />
+                <small className="field-hint">A short summary shown at the top of the public page.</small>
+              </label>
+              <label>
                 Slug
                 <input
                   value={pageForm.slug}
@@ -1507,10 +1525,10 @@ function App() {
                     placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
                   />
                 </label>
-                {topicPlanTopic.trim() && pages.some((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()) && (
+                {topicPlanTopic.trim() && pages.some((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topicPlanTopic.trim()).toLowerCase()) && (
                   <div className="topic-plan-existing">
-                    <span className="field-label">Existing pages included as context</span>
-                    <p>{pages.filter((item) => item.section.toLowerCase() === topicPlanTopic.trim().toLowerCase()).map((item) => item.title).join(" · ")}</p>
+                    <span className="field-label">Existing pages excluded from suggestions</span>
+                    <p>{pages.filter((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topicPlanTopic.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
                   </div>
                 )}
                 <fieldset className="focus-options">
@@ -1530,14 +1548,14 @@ function App() {
                   Number of sections
                   <input
                     type="number"
-                    min={2}
+                    min={1}
                     max={15}
                     step={1}
                     value={topicPlanCount}
                     onChange={(event) => setTopicPlanCount(Number(event.target.value))}
                     required
                   />
-                  <small className="field-hint">Choose between 2 and 15 sections.</small>
+                  <small className="field-hint">Choose between 1 and 15 sections.</small>
                 </label>
                 <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
@@ -1575,7 +1593,7 @@ function App() {
               )}
             </section>
           )}
-          {page && (
+          {page && !isTopicPlanOpen && (
             <>
               <div className="interview-heading">
                 <div>

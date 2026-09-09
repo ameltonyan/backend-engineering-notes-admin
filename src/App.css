@@ -676,6 +676,10 @@ input:disabled {
   background: var(--panel);
 }
 
+.topic-plan-candidate textarea {
+  min-height: 96px;
+}
+
 .topic-plan-candidate-heading {
   display: flex;
   align-items: center;
