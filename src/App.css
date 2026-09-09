@@ -1149,23 +1149,26 @@ input:disabled {
   right: clamp(16px, 3vw, 36px);
   bottom: 24px;
   z-index: 8;
-  display: inline-flex;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
+  padding: 0;
   border-color: var(--green);
+  border-radius: 50%;
   background: var(--green);
   color: white;
+  font-size: 20px;
+  line-height: 1;
   box-shadow: 4px 4px 0 rgba(7, 88, 67, .2);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
 .back-to-top:hover {
   border-color: var(--green-dark);
   background: var(--green-dark);
-}
-
-.back-to-top span {
-  font-size: 12px;
+  transform: translateY(-2px);
 }
 
 .ai-form {

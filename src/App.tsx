@@ -1885,9 +1885,10 @@ function App() {
           className="back-to-top"
           type="button"
           aria-label="Back to top"
+          title="Back to top"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
-          ↑ <span>Top</span>
+          <span aria-hidden="true">↑</span>
         </button>
       )}
       {deleteConfirmation && (
