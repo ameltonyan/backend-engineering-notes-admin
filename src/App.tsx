@@ -1491,11 +1491,12 @@ function App() {
                 <label>
                   Topic
                   <input id="topic-plan-topic" value={topicPlanTopic} onChange={(event) => setTopicPlanTopic(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
-                  <small className="field-hint">This topic becomes the section for the pages you create.</small>
+                  <small className="field-hint">Enter the subject only; choose the learner level in the audience field.</small>
                 </label>
                 <label>
-                  Target
-                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} required />
+                  Audience / target role
+                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Beginner backend engineer" required />
+                  <small className="field-hint">Controls the depth and expectations of the generated pages.</small>
                 </label>
                 <label>
                   Additional guidance (optional)
