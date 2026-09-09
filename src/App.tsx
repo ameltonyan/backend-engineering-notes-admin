@@ -1350,6 +1350,9 @@ function App() {
                       aria-label={`${item.title}. Slug: ${item.slug}`}
                       onClick={() => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(item.slug); }}
                     >
+                      <span className="page-index" aria-hidden="true">
+                        {String(pageIndex + 1).padStart(2, "0")}
+                      </span>
                       <strong>{item.title}</strong>
                     </button>
                     {item.slug === selectedSlug && currentSection && (
@@ -1500,6 +1503,7 @@ function App() {
               </div>
             </div>
             </form>
+            {page && <div className="page-form-separator" aria-hidden="true" />}
           </>}
           {isTopicPlanOpen && (
             <section className="topic-plan" id="topic-plan" aria-label={`Create pages with AI for ${topicPlanTopic || "a new topic"}`}>

@@ -533,6 +533,19 @@ input:disabled {
   text-align: left;
 }
 
+.page-index {
+  position: absolute;
+  top: 6px;
+  right: 25px;
+  padding: 1px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 8px 'DM Mono', monospace;
+  line-height: 1;
+  opacity: .75;
+  pointer-events: none;
+}
+
 .section-edit-fields {
   display: flex;
   flex: 1;
@@ -721,7 +734,8 @@ input:disabled {
 }
 
 .page-select {
-  display: grid;
+  position: relative;
+  display: block;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -779,7 +793,12 @@ input:disabled {
 }
 
 .page-form {
-  margin: 26px 0 48px;
+  margin: 26px 0 28px;
+}
+
+.page-form-separator {
+  margin-bottom: 28px;
+  border-top: 1px solid var(--line);
 }
 
 .form-fields {
@@ -815,7 +834,6 @@ input:disabled {
   align-items: end;
   column-gap: 24px;
   row-gap: 12px;
-  border-bottom: 1px solid var(--line);
   padding-bottom: 14px;
 }
 
