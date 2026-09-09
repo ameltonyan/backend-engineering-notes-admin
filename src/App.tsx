@@ -724,7 +724,7 @@ function App() {
             className="tree-node-toggle"
             type="button"
             aria-expanded={children.length ? isExpanded : undefined}
-            aria-label={children.length ? `${isExpanded ? "Collapse" : "Expand"} ${question.question}` : question.question}
+            aria-label={`Select ${question.question}`}
             onClick={() => {
               if (isSelected) {
                 setSelectedQuestionId(null);
@@ -739,7 +739,7 @@ function App() {
               setSelectedQuestionId(question.id);
               setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
               if (children.length) {
-                setExpandedQuestions((current) => ({ ...current, [question.id]: !isExpanded }));
+                setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
               }
             }}
           >
