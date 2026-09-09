@@ -911,10 +911,6 @@ function App() {
   const generateQuestions = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
-    if (!aiIdea.trim() && aiGenerationMode !== "follow-up") {
-      setError("Add an idea before generating questions.");
-      return;
-    }
     if (aiGenerationMode === "follow-up" && !selectedQuestion) {
       setError("Select a parent question before generating follow-ups.");
       return;
@@ -936,7 +932,10 @@ function App() {
         body: JSON.stringify({
           idea: editingQuestionId !== null || aiGenerationMode === "follow-up"
             ? editingContext
-            : `${aiIdea.trim()}\n\n${editingContext}`,
+            : aiIdea.trim(),
+          pageTitle: page?.title,
+          pageSection: page?.section,
+          pageDescription: page?.description ?? "",
           difficulty: aiDifficulty,
           type: aiType,
           count: aiGenerationMode === "batch-main"
@@ -944,9 +943,9 @@ function App() {
             : aiGenerateAlternatives
               ? Math.min(Math.max(aiCount, 1), 2)
               : 1,
-          existingQuestions: orderedQuestions
-            .filter((question) => question.parentQuestionId === null)
-            .map((question) => question.question),
+          existingQuestions: !aiIdea.trim() && aiGenerationMode !== "follow-up" && editingQuestionId === null
+            ? rootQuestions.map((question) => question.question)
+            : [],
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
       setGeneratedQuestions(result.questions);
@@ -1724,13 +1723,13 @@ function App() {
                       <p>{selectedQuestion.answer}</p>
                     </div>
                   )}
-                  {aiGenerationMode !== "follow-up" && rootQuestions.length > 0 && (
+                  {aiGenerationMode !== "follow-up" && editingQuestionId === null && rootQuestions.length > 0 && !aiIdea.trim() && (
                     <p className="field-hint">
                       {rootQuestions.length} existing initial question{rootQuestions.length === 1 ? "" : "s"} will be used to avoid duplicate coverage.
                     </p>
                   )}
                   <label>
-                    {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : aiGenerationMode === "follow-up" ? "Additional guidance (optional)" : "Idea"}
+                    {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : aiGenerationMode === "follow-up" ? "Additional guidance (optional)" : "Idea (optional)"}
                     <textarea
                       rows={3}
                       id="ai-idea"
@@ -1738,6 +1737,9 @@ function App() {
                       onChange={(event) => setAiIdea(event.target.value)}
                       placeholder={selectedQuestion && editingQuestionId !== null ? "For example: Make the answer more conversational, simplify the explanation, or rewrite this as a senior-backend interview question." : selectedQuestion ? "Optional: ask about trade-offs, failure modes, or a production scenario." : "LongAdder and contention in Java concurrency"}
                     />
+                    {aiGenerationMode !== "follow-up" && editingQuestionId === null && (
+                      <small className="field-hint">Leave blank to use the current page context. An idea takes priority and can intentionally overlap existing questions.</small>
+                    )}
                   </label>
                   <div className="ai-fields">
                     <label>
