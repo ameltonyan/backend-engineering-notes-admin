@@ -261,6 +261,7 @@ function App() {
   const [selectedTopicSectionIndexes, setSelectedTopicSectionIndexes] = useState<number[]>([]);
   const [topicPlanLoading, setTopicPlanLoading] = useState(false);
   const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
 
   const getErrorMessage = (err: unknown) =>
@@ -303,16 +304,11 @@ function App() {
   }, [deleteConfirmation, loading]);
 
   useEffect(() => {
-    if (!isAiPanelOpen) return;
-
-    const closeWhenClickingOutside = (event: MouseEvent) => {
-      if (event.target instanceof Node && !aiPanelRef.current?.contains(event.target)) {
-        setIsAiPanelOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", closeWhenClickingOutside);
-    return () => document.removeEventListener("mousedown", closeWhenClickingOutside);
-  }, [isAiPanelOpen]);
+    const updateScrollTopVisibility = () => setShowScrollTop(window.scrollY > 520);
+    updateScrollTopVisibility();
+    window.addEventListener("scroll", updateScrollTopVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateScrollTopVisibility);
+  }, []);
 
   const sectionSuggestions = Array.from(
     new Set(sections.map((item) => item.name).filter(Boolean)),
@@ -395,6 +391,8 @@ function App() {
   const loadPage = async (slug: string) => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
+    setIsAiPanelOpen(false);
+    setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
     setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
     const loaded = (await request(
@@ -454,6 +452,11 @@ function App() {
     ) + 1;
     setError("");
     setNotice("");
+    setIsAiPanelOpen(false);
+    setIsTopicPlanOpen(false);
+    setGeneratedQuestions([]);
+    setMergedQuestion(null);
+    setSelectedGeneratedIndexes([]);
     if (parentId === null) setAiGenerationMode("main");
     setSelectedQuestionId(parentId);
     setEditingQuestionId(null);
@@ -475,6 +478,8 @@ function App() {
     setSelectedQuestionId(question.id);
     setEditingQuestionId(question.id);
     setIsQuestionFormOpen(true);
+    setIsAiPanelOpen(false);
+    setIsTopicPlanOpen(false);
     setQuestionForm({
       question: question.question,
       answer: question.answer,
@@ -492,6 +497,16 @@ function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const closeQuestionForm = () => {
+    setIsQuestionFormOpen(false);
+    setEditingQuestionId(null);
+    setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+  };
+
+  const closeAiPanel = () => {
+    setIsAiPanelOpen(false);
+  };
+
   const focusAiGeneration = (mode: AiGenerationMode = "main") => {
     setAiGenerationMode(mode);
     setAiCount(mode === "batch-main" ? 10 : 1);
@@ -500,6 +515,7 @@ function App() {
     setSelectedGeneratedIndexes([]);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
+    setIsTopicPlanOpen(false);
     setEditingQuestionId(null);
     window.requestAnimationFrame(() => {
       scrollToSection("ai-assist");
@@ -508,6 +524,8 @@ function App() {
   };
 
   const openTopicPlan = (section: Section) => {
+    setIsAiPanelOpen(false);
+    setIsQuestionFormOpen(false);
     setIsTopicPlanOpen(true);
     setTopicPlanSection(section);
     setTopicPlanTopic(section.name);
@@ -545,6 +563,8 @@ function App() {
   };
 
   const openNewTopicPlan = () => {
+    setIsAiPanelOpen(false);
+    setIsQuestionFormOpen(false);
     setIsTopicPlanOpen(true);
     setTopicPlanSection(null);
     setPage(null);
@@ -679,6 +699,7 @@ function App() {
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
     setIsQuestionFormOpen(false);
+    setIsTopicPlanOpen(false);
     setIsAiPanelOpen(true);
     window.requestAnimationFrame(() => {
       scrollToSection("ai-assist");
@@ -704,14 +725,14 @@ function App() {
             onClick={() => {
               if (isSelected) {
                 setSelectedQuestionId(null);
-                setIsQuestionFormOpen(false);
-                setEditingQuestionId(null);
+                closeQuestionForm();
                 setIsAiPanelOpen(false);
+                closeTopicPlan();
                 return;
               }
-              setIsQuestionFormOpen(false);
-              setEditingQuestionId(null);
+              closeQuestionForm();
               setIsAiPanelOpen(false);
+              closeTopicPlan();
               setSelectedQuestionId(question.id);
               setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
               if (children.length) {
@@ -879,7 +900,7 @@ function App() {
   const generateQuestions = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
-    if (!aiIdea.trim()) {
+    if (!aiIdea.trim() && aiGenerationMode !== "follow-up") {
       setError("Add an idea before generating questions.");
       return;
     }
@@ -894,7 +915,7 @@ function App() {
     setAiLoading(true);
     try {
       const generationContext = aiGenerationMode === "follow-up" && selectedQuestion
-        ? `Generate follow-up questions for this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". These drafts will be saved beneath that question and should naturally deepen or challenge it.`
+        ? `Generate follow-up questions for this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". These drafts will be saved beneath that question and should naturally deepen or challenge it.${aiIdea.trim() ? ` Additional guidance from the editor: "${aiIdea.trim()}"` : ""}`
         : `Generate main/root interview questions for the topic and section ${page?.section} / ${page?.title}: "${aiIdea.trim()}". These drafts will not have a parent.`;
       const editingContext = selectedQuestion && editingQuestionId !== null
         ? `Improve this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". Return stronger alternative versions that preserve the intent and technical accuracy. These drafts will replace the current question only after admin review.`
@@ -902,7 +923,9 @@ function App() {
       const result = (await request("/api/admin/ai/questions/generate", {
         method: "POST",
         body: JSON.stringify({
-          idea: `${aiIdea.trim()}\n\n${editingContext}`,
+          idea: editingQuestionId !== null || aiGenerationMode === "follow-up"
+            ? editingContext
+            : `${aiIdea.trim()}\n\n${editingContext}`,
           difficulty: aiDifficulty,
           type: aiType,
           count: aiGenerationMode === "batch-main" ? aiCount : 1,
@@ -915,6 +938,10 @@ function App() {
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
       setAiUsage(result.usage ?? null);
+      setIsAiPanelOpen(true);
+      window.requestAnimationFrame(() => {
+        scrollToSection("ai-assist");
+      });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -939,6 +966,8 @@ function App() {
     });
     setEditingQuestionId(editingExistingQuestion ? selectedQuestion.id : null);
     setIsQuestionFormOpen(true);
+    setIsAiPanelOpen(false);
+    setIsTopicPlanOpen(false);
     setSelectedGeneratedIndexes([]);
     setQuestionFieldError("");
     window.requestAnimationFrame(() => {
@@ -1451,6 +1480,7 @@ function App() {
                   <h3>New page with AI</h3>
                   <span>{topicPlanSection ? `${topicPlanSection.name} · ` : "Start with a new topic · "}proposals remain unpublished until you create the selected pages</span>
                 </div>
+                <button type="button" disabled={topicPlanLoading || loading} onClick={closeTopicPlan}>Close</button>
               </div>
               <form className="topic-plan-form" onSubmit={generateTopicPlan}>
                 <label>
@@ -1583,6 +1613,7 @@ function App() {
                       <p className="eyebrow">{editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
                       <h3>{editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
+                    <button type="button" onClick={closeQuestionForm}>Close</button>
                   </div>
                   <label>
                     Question
@@ -1634,21 +1665,7 @@ function App() {
                     <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQuestionFormOpen(false);
-                        setEditingQuestionId(null);
-                        setQuestionForm({
-                          question: "",
-                          answer: "",
-                          parentQuestionId: null,
-                          displayOrder: 0,
-                        });
-                      }}
-                    >
-                      Cancel
-                    </button>
+                    <button type="button" onClick={closeQuestionForm}>Cancel</button>
                   </div>
                   </form>
                 )}
@@ -1665,6 +1682,7 @@ function App() {
                     <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Create initial questions with AI" : "Generate question with AI"}</h3>
                     <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Review and edit the generated questions before saving them to this section." : "Generate one draft to review before adding it."}</span>
                   </div>
+                  <button type="button" onClick={closeAiPanel}>Close</button>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
                   {selectedQuestion && editingQuestionId !== null && (
@@ -1681,13 +1699,13 @@ function App() {
                     </p>
                   )}
                   <label>
-                    {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : "Idea"}
+                    {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : aiGenerationMode === "follow-up" ? "Additional guidance (optional)" : "Idea"}
                     <textarea
                       rows={3}
                       id="ai-idea"
                       value={aiIdea}
                       onChange={(event) => setAiIdea(event.target.value)}
-                      placeholder={selectedQuestion && editingQuestionId !== null ? "For example: Make the answer more conversational, simplify the explanation, or rewrite this as a senior-backend interview question." : selectedQuestion ? "What should the interviewer probe next?" : "LongAdder and contention in Java concurrency"}
+                      placeholder={selectedQuestion && editingQuestionId !== null ? "For example: Make the answer more conversational, simplify the explanation, or rewrite this as a senior-backend interview question." : selectedQuestion ? "Optional: ask about trade-offs, failure modes, or a production scenario." : "LongAdder and contention in Java concurrency"}
                     />
                   </label>
                   <div className="ai-fields">
@@ -1729,18 +1747,7 @@ function App() {
                     <button className="primary" type="submit" disabled={isAiBusy}>
                       {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Create questions" : "Generate question"}
                     </button>
-                    <button
-                      type="button"
-                      disabled={isAiBusy}
-                      onClick={() => {
-                        setIsAiPanelOpen(false);
-                        setGeneratedQuestions([]);
-                        setMergedQuestion(null);
-                        setSelectedGeneratedIndexes([]);
-                      }}
-                    >
-                      Cancel
-                    </button>
+                    <button type="button" disabled={isAiBusy} onClick={closeAiPanel}>Close</button>
                   </div>
                 </form>
                 {generatedQuestions.length > 0 && (
@@ -1827,6 +1834,16 @@ function App() {
           {loading && <p className="muted">Saving...</p>}
         </section>
       </div>
+      {showScrollTop && (
+        <button
+          className="back-to-top"
+          type="button"
+          aria-label="Back to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          ↑ <span>Top</span>
+        </button>
+      )}
       {deleteConfirmation && (
         <div className="modal-backdrop" role="presentation">
           <section

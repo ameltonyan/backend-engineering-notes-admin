@@ -850,6 +850,21 @@ input:disabled {
   display: block;
 }
 
+.question-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.question-form-heading button,
+.ai-assist > .section-heading > button,
+.topic-plan > .section-heading > button {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
 .tree-node {
   position: relative;
   margin: 0 0 4px;
@@ -1088,6 +1103,30 @@ input:disabled {
 .ai-assist .section-heading {
   border-bottom: 0;
   padding-bottom: 0;
+}
+
+.back-to-top {
+  position: fixed;
+  right: clamp(16px, 3vw, 36px);
+  bottom: 24px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-color: var(--green);
+  background: var(--green);
+  color: white;
+  box-shadow: 4px 4px 0 rgba(7, 88, 67, .2);
+}
+
+.back-to-top:hover {
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+}
+
+.back-to-top span {
+  font-size: 12px;
 }
 
 .ai-form {
