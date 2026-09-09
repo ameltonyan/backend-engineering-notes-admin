@@ -1617,7 +1617,8 @@ function App() {
                   <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("batch-main")}>
                     Generate multiple questions with AI
                   </button>
-                  <button className="secondary" type="button" onClick={() => startQuestionCreation(null)}>
+                  <button className="manual-action" type="button" onClick={() => startQuestionCreation(null)}>
+                    <span aria-hidden="true">+</span>
                     Add question
                   </button>
                 </div>
