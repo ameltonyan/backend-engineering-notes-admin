@@ -253,9 +253,6 @@ function App() {
   const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
     "Core knowledge",
     "Internals",
-    "Performance",
-    "Production scenarios",
-    "Troubleshooting",
   ]);
   const [topicPlanCount, setTopicPlanCount] = useState(10);
   const [generatedTopicSections, setGeneratedTopicSections] = useState<GeneratedTopicSection[]>([]);
@@ -531,6 +528,7 @@ function App() {
     setIsTopicPlanOpen(true);
     setTopicPlanSection(section);
     setTopicPlanTopic(section.name);
+    setTopicPlanFocuses(["Core knowledge", "Internals"]);
     setGeneratedTopicSections([]);
     setSelectedTopicSectionIndexes([]);
     setError("");
@@ -571,6 +569,7 @@ function App() {
     setTopicPlanSection(null);
     setPage(null);
     setTopicPlanTopic("");
+    setTopicPlanFocuses(["Core knowledge", "Internals"]);
     setGeneratedTopicSections([]);
     setSelectedTopicSectionIndexes([]);
     setError("");
@@ -1269,8 +1268,8 @@ function App() {
         <aside className="page-list">
           <div className="list-heading">
             <div className="topic-list-title">
-              <h2>Topics &amp; sections</h2>
-              <span className="list-count">{pages.length} total</span>
+              <h2>Content library</h2>
+              <span className="list-count">{pages.length} {pages.length === 1 ? "page" : "pages"}</span>
             </div>
             <div className="create-content-actions">
               <button type="button" onClick={() => setIsCreateMenuOpen((current) => !current)} disabled={loading}>
@@ -1490,16 +1489,16 @@ function App() {
               </div>
               <form className="topic-plan-form" onSubmit={generateTopicPlan}>
                 <label>
-                  Topic / section name
+                  Topic
                   <input id="topic-plan-topic" value={topicPlanTopic} onChange={(event) => setTopicPlanTopic(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
-                  <small className="field-hint">You can rename this section before creating the selected pages.</small>
+                  <small className="field-hint">This topic becomes the section for the pages you create.</small>
                 </label>
                 <label>
                   Target
                   <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} required />
                 </label>
                 <label>
-                  Additional guidance
+                  Additional guidance (optional)
                   <textarea
                     rows={3}
                     value={topicPlanGuidance}
@@ -1528,17 +1527,16 @@ function App() {
                 </fieldset>
                 <label>
                   Number of sections
-                  <select value={topicPlanCount} onChange={(event) => setTopicPlanCount(Number(event.target.value))}>
-                    <option value={2}>2</option>
-                    <option value={3}>3</option>
-                    <option value={4}>4</option>
-                    <option value={5}>5</option>
-                    <option value={6}>6</option>
-                    <option value={8}>8</option>
-                    <option value={10}>10</option>
-                    <option value={12}>12</option>
-                    <option value={15}>15</option>
-                  </select>
+                  <input
+                    type="number"
+                    min={2}
+                    max={15}
+                    step={1}
+                    value={topicPlanCount}
+                    onChange={(event) => setTopicPlanCount(Number(event.target.value))}
+                    required
+                  />
+                  <small className="field-hint">Choose between 2 and 15 sections.</small>
                 </label>
                 <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
@@ -1580,16 +1578,16 @@ function App() {
             <>
               <div className="interview-heading">
                 <div>
-                  <p className="eyebrow">Interview path</p>
-                  <h3>Question hierarchy</h3>
-                  <span className="interview-context">{page.section} / {page.title} · {page.questions.length} questions · select a node to set the working context</span>
+                  <p className="eyebrow">Question workspace</p>
+                  <h3>Interview questions</h3>
+                  <span className="interview-context">{page.section} / {page.title} · {page.questions.length} questions · organize main questions and follow-ups</span>
                 </div>
                 <div className="question-actions">
                     <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("main")}>
                     AI generate question
                   </button>
                   <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("batch-main")}>
-                    AI generate multiple questions
+                    Generate multiple questions with AI
                   </button>
                   <button className="secondary" type="button" onClick={() => startQuestionCreation(null)}>
                     Add question
@@ -1684,8 +1682,8 @@ function App() {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">AI assist</p>
-                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Create initial questions with AI" : "Generate question with AI"}</h3>
-                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Review and edit the generated questions before saving them to this section." : "Generate one draft to review before adding it."}</span>
+                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Generate multiple questions with AI" : "Generate question with AI"}</h3>
+                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Generate up to 10 main-question drafts, then review and edit them before saving." : "Generate one draft to review before adding it."}</span>
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
@@ -1765,7 +1763,7 @@ function App() {
                   </div>
                   <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>
-                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Create questions" : "Generate question"}
+                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Generate questions" : "Generate question"}
                     </button>
                     <button type="button" disabled={isAiBusy} onClick={closeAiPanel}>Close</button>
                   </div>
