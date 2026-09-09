@@ -35,7 +35,7 @@ type QuestionForm = {
 };
 type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
-type AiGenerationMode = "main" | "follow-up";
+type AiGenerationMode = "main" | "batch-main" | "follow-up";
 type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
 type GeneratedTopicSection = { title: string; description: string };
 type AiUsage = {
@@ -65,12 +65,28 @@ const apiBaseUrl = (
 ).replace(/\/$/, "");
 const credentialsKey = "backend-engineering-notes-admin:credentials";
 const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
+const maxBatchQuestionCount = 10;
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
   "Negotiating with several billion parameters.",
   "Checking whether the answer is insightful or merely confident.",
   "Almost done. The machine is having a small existential crisis.",
+  "Sorting useful interview questions from impressive-sounding noise.",
+  "Looking for the trade-off hiding behind the obvious answer.",
+  "Turning backend concepts into questions a real interviewer might ask.",
+  "Checking that the answers sound spoken, not copied from a glossary.",
+  "Reviewing failure modes, edge cases, and production consequences.",
+  "Making sure the questions do not all wear the same disguise.",
+  "Comparing the new ideas with the questions already in this section.",
+  "Removing duplicate concepts before they reach your question tree.",
+  "Asking the model to be specific, practical, and technically honest.",
+  "Polishing the difference between knowing a term and reasoning about it.",
+  "Checking whether a senior engineer could answer this under pressure.",
+  "Giving the generated answers a conversational final pass.",
+  "Balancing coverage, difficulty, and questions worth discussing.",
+  "One more pass for clarity and useful production detail.",
+  "The request is taking its thoughtful route through the model.",
 ];
 
 function readCredentials() {
@@ -478,6 +494,10 @@ function App() {
 
   const focusAiGeneration = (mode: AiGenerationMode = "main") => {
     setAiGenerationMode(mode);
+    setAiCount(mode === "batch-main" ? 10 : 1);
+    setGeneratedQuestions([]);
+    setMergedQuestion(null);
+    setSelectedGeneratedIndexes([]);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
@@ -867,6 +887,10 @@ function App() {
       setError("Select a parent question before generating follow-ups.");
       return;
     }
+    if (aiGenerationMode === "batch-main" && (!Number.isInteger(aiCount) || aiCount < 1 || aiCount > maxBatchQuestionCount)) {
+      setError(`Number of questions must be between 1 and ${maxBatchQuestionCount}.`);
+      return;
+    }
     setAiLoading(true);
     try {
       const generationContext = aiGenerationMode === "follow-up" && selectedQuestion
@@ -881,9 +905,17 @@ function App() {
           idea: `${aiIdea.trim()}\n\n${editingContext}`,
           difficulty: aiDifficulty,
           type: aiType,
-          count: aiCount,
+          count: aiGenerationMode === "batch-main" ? aiCount : 1,
+          existingQuestions: orderedQuestions
+            .filter((question) => question.parentQuestionId === null)
+            .map((question) => question.question),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      if (aiGenerationMode === "batch-main") {
+        await saveGeneratedQuestions(result.questions);
+        setAiUsage(result.usage ?? null);
+        return;
+      }
       setGeneratedQuestions(result.questions);
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
@@ -942,6 +974,34 @@ function App() {
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const saveGeneratedQuestions = async (questions: GeneratedQuestion[]) => {
+    if (!page || questions.length === 0) return;
+    let nextOrder = Math.max(
+      -1,
+      ...orderedQuestions
+        .filter((question) => question.parentQuestionId === null)
+        .map((question) => question.displayOrder),
+    ) + 1;
+    for (const generated of questions) {
+      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions`, {
+        method: "POST",
+        body: JSON.stringify({
+          question: generated.question.trim(),
+          answer: generated.answer.trim(),
+          parentQuestionId: null,
+          displayOrder: nextOrder,
+        }),
+      });
+      nextOrder += 1;
+    }
+    setGeneratedQuestions([]);
+    setMergedQuestion(null);
+    setSelectedGeneratedIndexes([]);
+    setIsAiPanelOpen(false);
+    await loadPage(page.slug);
+    setNotice(`${questions.length} initial question${questions.length === 1 ? "" : "s"} created`);
   };
 
   const deleteQuestion = async (questionId: number) => {
@@ -1461,10 +1521,13 @@ function App() {
                 </div>
                 <div className="question-actions">
                     <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("main")}>
-                    Generate main questions with AI
+                    AI generate question
+                  </button>
+                  <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("batch-main")}>
+                    AI generate multiple questions
                   </button>
                   <button className="secondary" type="button" onClick={() => startQuestionCreation(null)}>
-                    Main question
+                    Add question
                   </button>
                 </div>
               </div>
@@ -1570,8 +1633,8 @@ function App() {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">AI assist</p>
-                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : "Generate main-question candidates"}</h3>
-                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : "Candidates will be created as main questions"}</span>
+                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Create initial questions with AI" : "Generate question with AI"}</h3>
+                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "The generated questions will be added to this section immediately." : "Generate one draft to review before adding it."}</span>
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
@@ -1582,6 +1645,11 @@ function App() {
                       <p className="field-hint">Current answer</p>
                       <p>{selectedQuestion.answer}</p>
                     </div>
+                  )}
+                  {aiGenerationMode !== "follow-up" && rootQuestions.length > 0 && (
+                    <p className="field-hint">
+                      {rootQuestions.length} existing initial question{rootQuestions.length === 1 ? "" : "s"} will be used to avoid duplicate coverage.
+                    </p>
                   )}
                   <label>
                     {selectedQuestion && editingQuestionId !== null ? "How should AI improve it?" : "Idea"}
@@ -1615,18 +1683,22 @@ function App() {
                         <option value="TRICK">Trick question</option>
                       </select>
                     </label>
-                    <label>
-                      Options
-                      <select value={aiCount} onChange={(event) => setAiCount(Number(event.target.value))}>
-                        <option value={1}>1</option>
-                        <option value={3}>3</option>
-                        <option value={5}>5</option>
-                      </select>
-                    </label>
+                    {aiGenerationMode === "batch-main" && (
+                      <label>
+                        Number of questions
+                        <input
+                          type="number"
+                          min={1}
+                          max={maxBatchQuestionCount}
+                          value={aiCount}
+                          onChange={(event) => setAiCount(Number(event.target.value))}
+                        />
+                      </label>
+                    )}
                   </div>
                   <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>
-                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : "Generate main questions with AI"}
+                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Create questions" : "Generate question"}
                     </button>
                     <button
                       type="button"
@@ -1668,7 +1740,7 @@ function App() {
                           <span className="eyebrow">Option {index + 1}</span>
                         </label>
                         <strong>{generated.question}</strong>
-                        <span className="candidate-meta">{generated.difficulty} · {generated.type} · {selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
+                        <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
                         <p>{generated.answer}</p>
                         <div className="actions">
                           <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
