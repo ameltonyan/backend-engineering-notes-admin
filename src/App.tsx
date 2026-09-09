@@ -911,11 +911,6 @@ function App() {
             .map((question) => question.question),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
-      if (aiGenerationMode === "batch-main") {
-        await saveGeneratedQuestions(result.questions);
-        setAiUsage(result.usage ?? null);
-        return;
-      }
       setGeneratedQuestions(result.questions);
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
@@ -978,30 +973,64 @@ function App() {
 
   const saveGeneratedQuestions = async (questions: GeneratedQuestion[]) => {
     if (!page || questions.length === 0) return;
-    let nextOrder = Math.max(
-      -1,
-      ...orderedQuestions
-        .filter((question) => question.parentQuestionId === null)
-        .map((question) => question.displayOrder),
-    ) + 1;
-    for (const generated of questions) {
-      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions`, {
+    if (questions.some((question) => !question.question.trim() || !question.answer.trim())) {
+      setError("Each generated question needs both a question and an answer before saving.");
+      return;
+    }
+    setError("");
+    setAiLoading(true);
+    try {
+      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions/bulk`, {
         method: "POST",
         body: JSON.stringify({
-          question: generated.question.trim(),
-          answer: generated.answer.trim(),
-          parentQuestionId: null,
-          displayOrder: nextOrder,
+          questions: questions.map((question, index) => ({
+            question: question.question.trim(),
+            answer: question.answer.trim(),
+            parentQuestionId: null,
+            displayOrder: index,
+          })),
         }),
       });
-      nextOrder += 1;
+      setGeneratedQuestions([]);
+      setMergedQuestion(null);
+      setSelectedGeneratedIndexes([]);
+      setIsAiPanelOpen(false);
+      await loadPage(page.slug);
+      setNotice(`${questions.length} initial question${questions.length === 1 ? "" : "s"} created`);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
     }
+  };
+
+  const updateGeneratedQuestion = (index: number, field: "question" | "answer", value: string) => {
+    setGeneratedQuestions((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item,
+    ));
+  };
+
+  const removeGeneratedQuestion = (index: number) => {
+    setGeneratedQuestions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setSelectedGeneratedIndexes((current) => current
+      .filter((selectedIndex) => selectedIndex !== index)
+      .map((selectedIndex) => selectedIndex > index ? selectedIndex - 1 : selectedIndex));
+  };
+
+  const toggleGeneratedQuestion = (index: number) => {
+    setSelectedGeneratedIndexes((current) => current.includes(index)
+      ? current.filter((item) => item !== index)
+      : [...current, index]);
+  };
+
+  const saveSelectedGeneratedQuestions = () => {
+    void saveGeneratedQuestions(selectedGeneratedIndexes.map((index) => generatedQuestions[index]));
+  };
+
+  const discardGeneratedQuestions = () => {
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
-    setIsAiPanelOpen(false);
-    await loadPage(page.slug);
-    setNotice(`${questions.length} initial question${questions.length === 1 ? "" : "s"} created`);
   };
 
   const deleteQuestion = async (questionId: number) => {
@@ -1634,7 +1663,7 @@ function App() {
                   <div>
                     <p className="eyebrow">AI assist</p>
                     <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Create initial questions with AI" : "Generate question with AI"}</h3>
-                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "The generated questions will be added to this section immediately." : "Generate one draft to review before adding it."}</span>
+                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Review and edit the generated questions before saving them to this section." : "Generate one draft to review before adding it."}</span>
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
@@ -1722,30 +1751,35 @@ function App() {
                         <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
                       )}
                     </div>
-                    <p className="field-hint">{selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
+                    <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     {generatedQuestions.map((generated, index) => (
                       <article className="generated-question" key={`${generated.question}-${index}`}>
                         <label className="generated-select">
                           <input
                             type="checkbox"
                             checked={selectedGeneratedIndexes.includes(index)}
-                            onChange={() =>
-                              setSelectedGeneratedIndexes((current) =>
-                                current.includes(index)
-                                  ? current.filter((item) => item !== index)
-                                  : current.length < 2 ? [...current, index] : current,
-                              )
-                            }
+                            onChange={() => toggleGeneratedQuestion(index)}
                           />
                           <span className="eyebrow">Option {index + 1}</span>
                         </label>
-                        <strong>{generated.question}</strong>
+                        {aiGenerationMode === "batch-main" ? (
+                          <label className="generated-edit-field">
+                            <span>Question</span>
+                            <input value={generated.question} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
+                          </label>
+                        ) : <strong>{generated.question}</strong>}
                         <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
-                        <p>{generated.answer}</p>
+                        {aiGenerationMode === "batch-main" ? (
+                          <label className="generated-edit-field">
+                            <span>Answer</span>
+                            <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
+                          </label>
+                        ) : <p>{generated.answer}</p>}
                         <div className="actions">
-                          <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
+                          {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
-                          </button>
+                          </button>}
+                          {aiGenerationMode === "batch-main" && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
                         </div>
                       </article>
                     ))}
@@ -1762,10 +1796,19 @@ function App() {
                       </article>
                     )}
                     <div className="actions generated-actions">
-                      <button type="button" onClick={mergeSelectedQuestions} disabled={isAiBusy || selectedGeneratedIndexes.length !== 2}>
-                        {aiLoading ? "Merging..." : "Merge selected"}
-                      </button>
-                      <button
+                      {aiGenerationMode === "batch-main" ? <>
+                        <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length === 0} onClick={saveSelectedGeneratedQuestions}>
+                          {aiLoading ? "Saving..." : `Save selected (${selectedGeneratedIndexes.length})`}
+                        </button>
+                        <button className="primary" type="button" disabled={isAiBusy} onClick={() => void saveGeneratedQuestions(generatedQuestions)}>
+                          {aiLoading ? "Saving..." : `Save all (${generatedQuestions.length})`}
+                        </button>
+                        <button type="button" disabled={isAiBusy} onClick={discardGeneratedQuestions}>Discard</button>
+                      </> : <>
+                        <button type="button" onClick={mergeSelectedQuestions} disabled={isAiBusy || selectedGeneratedIndexes.length !== 2}>
+                          {aiLoading ? "Merging..." : "Merge selected"}
+                        </button>
+                        <button
                         className="primary"
                         type="button"
                         disabled={selectedGeneratedIndexes.length !== 1}
@@ -1773,6 +1816,7 @@ function App() {
                       >
                         Use selected in editor
                       </button>
+                      </>}
                     </div>
                   </div>
                 )}
