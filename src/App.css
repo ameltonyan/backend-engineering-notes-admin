@@ -1163,6 +1163,40 @@ input:disabled {
   gap: 12px;
 }
 
+.ai-alternatives-field {
+  display: grid;
+  align-self: end;
+  align-content: end;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 43px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.checkbox-label input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+
 .generated-questions {
   display: grid;
   gap: 12px;
@@ -1346,6 +1380,10 @@ button:disabled {
     grid-template-columns: 1fr 1fr;
   }
 
+  .ai-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .question-form {
     margin-left: 0;
   }
@@ -1392,6 +1430,10 @@ button:disabled {
   }
 
   .form-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-fields {
     grid-template-columns: 1fr;
   }
 

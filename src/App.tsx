@@ -237,6 +237,7 @@ function App() {
   const [aiDifficulty, setAiDifficulty] = useState<Difficulty>("ADVANCED");
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
   const [aiCount, setAiCount] = useState(3);
+  const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestion | null>(null);
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
@@ -510,6 +511,7 @@ function App() {
   const focusAiGeneration = (mode: AiGenerationMode = "main") => {
     setAiGenerationMode(mode);
     setAiCount(mode === "batch-main" ? 10 : 1);
+    setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
@@ -695,6 +697,7 @@ function App() {
     setEditingQuestionId(question.id);
     setAiGenerationMode("main");
     setAiIdea("");
+    setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
@@ -928,7 +931,11 @@ function App() {
             : `${aiIdea.trim()}\n\n${editingContext}`,
           difficulty: aiDifficulty,
           type: aiType,
-          count: aiGenerationMode === "batch-main" ? aiCount : 1,
+          count: aiGenerationMode === "batch-main"
+            ? aiCount
+            : aiGenerateAlternatives
+              ? Math.min(Math.max(aiCount, 1), 2)
+              : 1,
           existingQuestions: orderedQuestions
             .filter((question) => question.parentQuestionId === null)
             .map((question) => question.question),
@@ -1480,7 +1487,6 @@ function App() {
                   <h3>New page with AI</h3>
                   <span>{topicPlanSection ? `${topicPlanSection.name} · ` : "Start with a new topic · "}proposals remain unpublished until you create the selected pages</span>
                 </div>
-                <button type="button" disabled={topicPlanLoading || loading} onClick={closeTopicPlan}>Close</button>
               </div>
               <form className="topic-plan-form" onSubmit={generateTopicPlan}>
                 <label>
@@ -1613,7 +1619,6 @@ function App() {
                       <p className="eyebrow">{editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
                       <h3>{editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
-                    <button type="button" onClick={closeQuestionForm}>Close</button>
                   </div>
                   <label>
                     Question
@@ -1682,7 +1687,6 @@ function App() {
                     <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Create initial questions with AI" : "Generate question with AI"}</h3>
                     <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Review and edit the generated questions before saving them to this section." : "Generate one draft to review before adding it."}</span>
                   </div>
-                  <button type="button" onClick={closeAiPanel}>Close</button>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
                   {selectedQuestion && editingQuestionId !== null && (
@@ -1741,6 +1745,22 @@ function App() {
                           onChange={(event) => setAiCount(Number(event.target.value))}
                         />
                       </label>
+                    )}
+                    {aiGenerationMode !== "batch-main" && (
+                      <div className="ai-alternatives-field">
+                        <label className="checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={aiGenerateAlternatives}
+                            onChange={(event) => {
+                              const enabled = event.target.checked;
+                              setAiGenerateAlternatives(enabled);
+                              setAiCount(enabled ? 2 : 1);
+                            }}
+                          />
+                          Generate alternatives
+                        </label>
+                      </div>
                     )}
                   </div>
                   <div className="actions question-form-actions">
