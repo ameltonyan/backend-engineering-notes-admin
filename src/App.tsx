@@ -259,6 +259,8 @@ function App() {
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
   const [answerImprovements, setAnswerImprovements] = useState<Record<string, AnswerImprovement>>({});
   const [improvingAnswers, setImprovingAnswers] = useState<Record<string, boolean>>({});
+  const [answerImprovementCounts, setAnswerImprovementCounts] = useState<Record<string, number>>({});
+  const [savingGeneratedQuestions, setSavingGeneratedQuestions] = useState<Record<string, boolean>>({});
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
@@ -987,6 +989,7 @@ function App() {
       setSelectedGeneratedIndexes([]);
       setAnswerImprovements({});
       setImprovingAnswers({});
+      setAnswerImprovementCounts({});
       setAiUsage(result.usage ?? null);
       setIsAiPanelOpen(true);
       window.requestAnimationFrame(() => {
@@ -1117,11 +1120,61 @@ function App() {
       setGeneratedQuestions((current) => current.map((item) =>
         item.draftId === draft.draftId ? { ...item, ...improved } : item,
       ));
+      setAnswerImprovementCounts((current) => ({
+        ...current,
+        [draft.draftId]: (current[draft.draftId] ?? 0) + 1,
+      }));
       setAiUsage(result.usage ?? null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setImprovingAnswers((current) => ({ ...current, [draft.draftId]: false }));
+    }
+  };
+
+  const saveGeneratedQuestion = async (draft: GeneratedQuestionDraft) => {
+    if (!page || !draft.question.trim() || !draft.answer.trim()) {
+      setError("The generated question needs both a question and an answer before saving.");
+      return;
+    }
+    const editingExistingQuestion = editingQuestionId !== null && selectedQuestion;
+    const parentQuestionId = editingExistingQuestion
+      ? selectedQuestion.parentQuestionId
+      : aiGenerationMode === "follow-up"
+        ? selectedQuestion?.id ?? null
+        : null;
+    const siblingOrder = Math.max(
+      -1,
+      ...orderedQuestions
+        .filter((question) => question.parentQuestionId === parentQuestionId && question.id !== editingQuestionId)
+        .map((question) => question.displayOrder),
+    ) + 1;
+    setError("");
+    setSavingGeneratedQuestions((current) => ({ ...current, [draft.draftId]: true }));
+    try {
+      const path = editingExistingQuestion
+        ? `/api/admin/questions/${editingQuestionId}`
+        : `/api/admin/pages/${encodeURIComponent(page.slug)}/questions`;
+      await request(path, {
+        method: editingExistingQuestion ? "PUT" : "POST",
+        body: JSON.stringify({
+          question: draft.question.trim(),
+          answer: draft.answer.trim(),
+          parentQuestionId,
+          displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
+        }),
+      });
+      const removedIndex = generatedQuestions.findIndex((item) => item.draftId === draft.draftId);
+      setGeneratedQuestions((current) => current.filter((item) => item.draftId !== draft.draftId));
+      setSelectedGeneratedIndexes((current) => current
+        .filter((index) => index !== removedIndex)
+        .map((index) => index > removedIndex ? index - 1 : index));
+      await loadPage(page.slug);
+      setNotice(editingExistingQuestion ? "Question updated" : "Question saved");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingGeneratedQuestions((current) => ({ ...current, [draft.draftId]: false }));
     }
   };
 
@@ -1446,8 +1499,6 @@ function App() {
           {(error || notice) && (
             <div
               className={error ? "status-banner error-banner" : "status-banner notice-banner"}
-              role={error ? "alert" : "status"}
-              aria-live="polite"
             >
               <span>{error || notice}</span>
               <button
@@ -1889,7 +1940,11 @@ function App() {
                     </div>
                     <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     {generatedQuestions.map((generated, index) => (
-                      <article className="generated-question" key={generated.draftId}>
+                      <article
+                        className={`generated-question${improvingAnswers[generated.draftId] ? " generated-question-improving" : ""}`}
+                        key={generated.draftId}
+                        aria-busy={Boolean(improvingAnswers[generated.draftId])}
+                      >
                         <label className="generated-select">
                           <input
                             type="checkbox"
@@ -1912,8 +1967,15 @@ function App() {
                           </label>
                         ) : <p>{generated.answer}</p>}
                         <div className="answer-improvement">
-                          <label>
-                            Improve this answer
+                          <label className="answer-improvement-label">
+                            <span>
+                              Improve this answer
+                              {answerImprovementCounts[generated.draftId] ? (
+                                <small className="answer-improvement-count">
+                                  Improved {answerImprovementCounts[generated.draftId]}x
+                                </small>
+                              ) : null}
+                            </span>
                             <textarea
                               rows={3}
                               value={answerImprovements[generated.draftId]?.criteria ?? ""}
@@ -1935,14 +1997,30 @@ function App() {
                               Simplify
                             </label>
                           </div>
-                          <button type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
-                            {improvingAnswers[generated.draftId] ? "Improving answer..." : "Improve answer"}
-                          </button>
+                          <div className="answer-improvement-actions">
+                            <button className="compact-action" type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
+                              {improvingAnswers[generated.draftId] ? "Improving..." : "Improve answer"}
+                            </button>
+                            {improvingAnswers[generated.draftId] && (
+                              <span className="answer-improvement-status" role="status">
+                                <span className="answer-improvement-spinner" aria-hidden="true" />
+                                Revising this answer...
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="actions">
                           {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
                           </button>}
+                          <button
+                            type="button"
+                            className="primary candidate-save-action"
+                            disabled={Boolean(savingGeneratedQuestions[generated.draftId])}
+                            onClick={() => void saveGeneratedQuestion(generated)}
+                          >
+                            {savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
+                          </button>
                           {aiGenerationMode === "batch-main" && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
                         </div>
                       </article>
