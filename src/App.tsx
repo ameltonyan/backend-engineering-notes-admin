@@ -261,6 +261,7 @@ function App() {
   const [improvingAnswers, setImprovingAnswers] = useState<Record<string, boolean>>({});
   const [answerImprovementCounts, setAnswerImprovementCounts] = useState<Record<string, number>>({});
   const [savingGeneratedQuestions, setSavingGeneratedQuestions] = useState<Record<string, boolean>>({});
+  const [questionImprovement, setQuestionImprovement] = useState<AnswerImprovement>(defaultAnswerImprovement);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
@@ -552,6 +553,7 @@ function App() {
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
+    setQuestionImprovement(defaultAnswerImprovement);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
     setIsTopicPlanOpen(false);
@@ -739,6 +741,7 @@ function App() {
     setEditingQuestionId(question.id);
     setAiGenerationMode("main");
     setAiIdea("");
+    setQuestionImprovement(defaultAnswerImprovement);
     setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
@@ -957,32 +960,43 @@ function App() {
     }
     setAiLoading(true);
     try {
-      const generationContext = aiGenerationMode === "follow-up" && selectedQuestion
-        ? `Generate follow-up questions for this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". These drafts will be saved beneath that question and should naturally deepen or challenge it.${aiIdea.trim() ? ` Additional guidance from the editor: "${aiIdea.trim()}"` : ""}`
-        : `Generate main/root interview questions for the topic and section ${page?.section} / ${page?.title}: "${aiIdea.trim()}". These drafts will not have a parent.`;
-      const editingContext = selectedQuestion && editingQuestionId !== null
-        ? `Improve this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". Return stronger alternative versions that preserve the intent and technical accuracy. These drafts will replace the current question only after admin review.`
-        : generationContext;
-      const result = (await request("/api/admin/ai/questions/generate", {
+      const editingExistingQuestion = editingQuestionId !== null && selectedQuestion;
+      const path = editingExistingQuestion
+        ? "/api/admin/ai/questions/improve"
+        : "/api/admin/ai/questions/generate";
+      const payload = editingExistingQuestion
+        ? {
+            question: selectedQuestion.question,
+            answer: selectedQuestion.answer,
+            criteria: aiIdea.trim() || null,
+            humanized: questionImprovement.humanized,
+            shortened: questionImprovement.shortened,
+            simplified: questionImprovement.simplified,
+            answerOnly: false,
+            difficulty: aiDifficulty,
+            type: aiType,
+          }
+        : {
+            idea: aiIdea.trim() || null,
+            parentQuestion: aiGenerationMode === "follow-up" ? selectedQuestion?.question ?? null : null,
+            parentAnswer: aiGenerationMode === "follow-up" ? selectedQuestion?.answer ?? null : null,
+            pageTitle: page?.title,
+            pageSection: page?.section,
+            pageDescription: page?.description ?? "",
+            difficulty: aiDifficulty,
+            type: aiType,
+            count: aiGenerationMode === "batch-main"
+              ? aiCount
+              : aiGenerateAlternatives
+                ? Math.min(Math.max(aiCount, 1), 2)
+                : 1,
+            existingQuestions: !aiIdea.trim() && aiGenerationMode !== "follow-up"
+              ? rootQuestions.map((question) => question.question)
+              : [],
+          };
+      const result = (await request(path, {
         method: "POST",
-        body: JSON.stringify({
-          idea: editingQuestionId !== null || aiGenerationMode === "follow-up"
-            ? editingContext
-            : aiIdea.trim(),
-          pageTitle: page?.title,
-          pageSection: page?.section,
-          pageDescription: page?.description ?? "",
-          difficulty: aiDifficulty,
-          type: aiType,
-          count: aiGenerationMode === "batch-main"
-            ? aiCount
-            : aiGenerateAlternatives
-              ? Math.min(Math.max(aiCount, 1), 2)
-              : 1,
-          existingQuestions: !aiIdea.trim() && aiGenerationMode !== "follow-up" && editingQuestionId === null
-            ? rootQuestions.map((question) => question.question)
-            : [],
-        }),
+        body: JSON.stringify(payload),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
       setGeneratedQuestions(createGeneratedDrafts(result.questions));
       setMergedQuestion(null);
@@ -1111,9 +1125,9 @@ function App() {
     setImprovingAnswers((current) => ({ ...current, [draft.draftId]: true }));
     try {
       const { draftId: _draftId, ...draftRequest } = draft;
-      const result = (await request("/api/admin/ai/questions/improve-answer", {
+      const result = (await request("/api/admin/ai/questions/improve", {
         method: "POST",
-        body: JSON.stringify({ ...draftRequest, ...improvement }),
+        body: JSON.stringify({ ...draftRequest, ...improvement, answerOnly: true }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
       const improved = result.questions[0];
       if (!improved) throw new Error("The AI did not return an improved answer.");
@@ -1872,6 +1886,22 @@ function App() {
                       <small className="field-hint">Leave blank to use the current page context. An idea takes priority and can intentionally overlap existing questions.</small>
                     )}
                   </label>
+                  {selectedQuestion && editingQuestionId !== null && (
+                    <div className="answer-improvement-options ai-answer-improvement-options" aria-label="Answer improvement options">
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.humanized} onChange={(event) => setQuestionImprovement((current) => ({ ...current, humanized: event.target.checked }))} />
+                        Humanized
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.shortened} onChange={(event) => setQuestionImprovement((current) => ({ ...current, shortened: event.target.checked }))} />
+                        Shorten
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.simplified} onChange={(event) => setQuestionImprovement((current) => ({ ...current, simplified: event.target.checked }))} />
+                        Simplify
+                      </label>
+                    </div>
+                  )}
                   <div className="ai-fields">
                     <label>
                       Difficulty
@@ -1966,49 +1996,51 @@ function App() {
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
-                        <div className="answer-improvement">
-                          <label className="answer-improvement-label">
-                            <span>
-                              Improve this answer
-                              {answerImprovementCounts[generated.draftId] ? (
-                                <small className="answer-improvement-count">
-                                  Improved {answerImprovementCounts[generated.draftId]}x
-                                </small>
-                              ) : null}
-                            </span>
-                            <textarea
-                              rows={3}
-                              value={answerImprovements[generated.draftId]?.criteria ?? ""}
-                              onChange={(event) => updateAnswerImprovement(generated.draftId, { criteria: event.target.value })}
-                              placeholder="Optional: add a production example, clarify the trade-off, or make it more direct."
-                            />
-                          </label>
-                          <div className="answer-improvement-options" aria-label={`Answer improvements for option ${index + 1}`}>
-                            <label className="checkbox-label">
-                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.humanized ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { humanized: event.target.checked })} />
-                              Humanized
-                            </label>
-                            <label className="checkbox-label">
-                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.shortened ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { shortened: event.target.checked })} />
-                              Shorten
-                            </label>
-                            <label className="checkbox-label">
-                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.simplified ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { simplified: event.target.checked })} />
-                              Simplify
-                            </label>
-                          </div>
-                          <div className="answer-improvement-actions">
-                            <button className="compact-action" type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
-                              {improvingAnswers[generated.draftId] ? "Improving..." : "Improve answer"}
-                            </button>
-                            {improvingAnswers[generated.draftId] && (
-                              <span className="answer-improvement-status" role="status">
-                                <span className="answer-improvement-spinner" aria-hidden="true" />
-                                Revising this answer...
+                        {aiGenerationMode === "follow-up" && editingQuestionId === null && (
+                          <div className="answer-improvement">
+                            <label className="answer-improvement-label">
+                              <span>
+                                Improve this answer
+                                {answerImprovementCounts[generated.draftId] ? (
+                                  <small className="answer-improvement-count">
+                                    Improved {answerImprovementCounts[generated.draftId]}x
+                                  </small>
+                                ) : null}
                               </span>
-                            )}
+                              <textarea
+                                rows={3}
+                                value={answerImprovements[generated.draftId]?.criteria ?? ""}
+                                onChange={(event) => updateAnswerImprovement(generated.draftId, { criteria: event.target.value })}
+                                placeholder="Optional: add a production example, clarify the trade-off, or make it more direct."
+                              />
+                            </label>
+                            <div className="answer-improvement-options" aria-label={`Answer improvements for option ${index + 1}`}>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.humanized ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { humanized: event.target.checked })} />
+                                Humanized
+                              </label>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.shortened ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { shortened: event.target.checked })} />
+                                Shorten
+                              </label>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.simplified ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { simplified: event.target.checked })} />
+                                Simplify
+                              </label>
+                            </div>
+                            <div className="answer-improvement-actions">
+                              <button className="compact-action" type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
+                                {improvingAnswers[generated.draftId] ? "Improving..." : "Improve answer"}
+                              </button>
+                              {improvingAnswers[generated.draftId] && (
+                                <span className="answer-improvement-status" role="status">
+                                  <span className="answer-improvement-spinner" aria-hidden="true" />
+                                  Revising this answer...
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
                         <div className="actions">
                           {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
