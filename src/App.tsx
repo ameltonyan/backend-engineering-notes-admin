@@ -39,6 +39,13 @@ type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
 type AiGenerationMode = "main" | "batch-main" | "follow-up";
 type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
+type GeneratedQuestionDraft = GeneratedQuestion & { draftId: string };
+type AnswerImprovement = {
+  criteria: string;
+  humanized: boolean;
+  shortened: boolean;
+  simplified: boolean;
+};
 type GeneratedTopicSection = { title: string; description: string };
 type AiUsage = {
   promptTokens?: number;
@@ -68,6 +75,12 @@ const apiBaseUrl = (
 const credentialsKey = "backend-engineering-notes-admin:credentials";
 const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
 const maxBatchQuestionCount = 10;
+const defaultAnswerImprovement: AnswerImprovement = {
+  criteria: "",
+  humanized: false,
+  shortened: false,
+  simplified: false,
+};
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
@@ -241,9 +254,11 @@ function App() {
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
   const [aiCount, setAiCount] = useState(3);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
-  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestion | null>(null);
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
+  const [answerImprovements, setAnswerImprovements] = useState<Record<string, AnswerImprovement>>({});
+  const [improvingAnswers, setImprovingAnswers] = useState<Record<string, boolean>>({});
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
@@ -264,10 +279,15 @@ function App() {
   const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
+  const generatedDraftSequence = useRef(0);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
   const isAiBusy = aiLoading || topicPlanLoading;
+  const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
+    ...question,
+    draftId: `generated-${++generatedDraftSequence.current}`,
+  }));
 
   useEffect(() => {
     if (!isAiBusy) {
@@ -962,9 +982,11 @@ function App() {
             : [],
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
-      setGeneratedQuestions(result.questions);
+      setGeneratedQuestions(createGeneratedDrafts(result.questions));
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
+      setAnswerImprovements({});
+      setImprovingAnswers({});
       setAiUsage(result.usage ?? null);
       setIsAiPanelOpen(true);
       window.requestAnimationFrame(() => {
@@ -1015,7 +1037,10 @@ function App() {
       const result = (await request("/api/admin/ai/questions/merge", {
         method: "POST",
         body: JSON.stringify({
-          questions: selectedGeneratedIndexes.map((index) => generatedQuestions[index]),
+          questions: selectedGeneratedIndexes.map((index) => {
+            const { question, answer, difficulty, type } = generatedQuestions[index];
+            return { question, answer, difficulty, type };
+          }),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
       setMergedQuestion(result.questions[0] ?? null);
@@ -1065,6 +1090,39 @@ function App() {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
       itemIndex === index ? { ...item, [field]: value } : item,
     ));
+  };
+
+  const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
+    setAnswerImprovements((current) => {
+      const existing = current[draftId];
+      return {
+        ...current,
+        [draftId]: { ...(existing ?? defaultAnswerImprovement), ...update },
+      };
+    });
+  };
+
+  const improveGeneratedAnswer = async (draft: GeneratedQuestionDraft) => {
+    const improvement = answerImprovements[draft.draftId] ?? defaultAnswerImprovement;
+    setError("");
+    setImprovingAnswers((current) => ({ ...current, [draft.draftId]: true }));
+    try {
+      const { draftId: _draftId, ...draftRequest } = draft;
+      const result = (await request("/api/admin/ai/questions/improve-answer", {
+        method: "POST",
+        body: JSON.stringify({ ...draftRequest, ...improvement }),
+      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      const improved = result.questions[0];
+      if (!improved) throw new Error("The AI did not return an improved answer.");
+      setGeneratedQuestions((current) => current.map((item) =>
+        item.draftId === draft.draftId ? { ...item, ...improved } : item,
+      ));
+      setAiUsage(result.usage ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setImprovingAnswers((current) => ({ ...current, [draft.draftId]: false }));
+    }
   };
 
   const removeGeneratedQuestion = (index: number) => {
@@ -1831,7 +1889,7 @@ function App() {
                     </div>
                     <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     {generatedQuestions.map((generated, index) => (
-                      <article className="generated-question" key={`${generated.question}-${index}`}>
+                      <article className="generated-question" key={generated.draftId}>
                         <label className="generated-select">
                           <input
                             type="checkbox"
@@ -1853,6 +1911,34 @@ function App() {
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
+                        <div className="answer-improvement">
+                          <label>
+                            Improve this answer
+                            <textarea
+                              rows={3}
+                              value={answerImprovements[generated.draftId]?.criteria ?? ""}
+                              onChange={(event) => updateAnswerImprovement(generated.draftId, { criteria: event.target.value })}
+                              placeholder="Optional: add a production example, clarify the trade-off, or make it more direct."
+                            />
+                          </label>
+                          <div className="answer-improvement-options" aria-label={`Answer improvements for option ${index + 1}`}>
+                            <label className="checkbox-label">
+                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.humanized ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { humanized: event.target.checked })} />
+                              Humanized
+                            </label>
+                            <label className="checkbox-label">
+                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.shortened ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { shortened: event.target.checked })} />
+                              Shorten
+                            </label>
+                            <label className="checkbox-label">
+                              <input type="checkbox" checked={answerImprovements[generated.draftId]?.simplified ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { simplified: event.target.checked })} />
+                              Simplify
+                            </label>
+                          </div>
+                          <button type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
+                            {improvingAnswers[generated.draftId] ? "Improving answer..." : "Improve answer"}
+                          </button>
+                        </div>
                         <div className="actions">
                           {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}

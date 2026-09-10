@@ -1301,6 +1301,32 @@ input:disabled {
   margin-bottom: 0;
 }
 
+.answer-improvement {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.answer-improvement label {
+  margin: 0;
+}
+
+.answer-improvement textarea {
+  min-height: 82px;
+}
+
+.answer-improvement-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.answer-improvement-options .checkbox-label {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
 .merged-question {
   border-color: var(--green);
   box-shadow: 4px 4px 0 #c9ddd0;
@@ -1516,6 +1542,10 @@ button:disabled {
   }
 
   .ai-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-improvement-options {
     grid-template-columns: 1fr;
   }
 
