@@ -1275,6 +1275,8 @@ input:disabled {
   display: grid;
   gap: 12px;
   margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
 .generated-questions h4 {
@@ -1299,6 +1301,111 @@ input:disabled {
 .generated-question p {
   white-space: pre-wrap;
   margin-bottom: 0;
+}
+
+.answer-improvement {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.generated-question-improving {
+  border-color: var(--green);
+  background: #f4fbf5;
+}
+
+.answer-improvement-label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.answer-improvement-label > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.answer-improvement-count {
+  padding: 2px 6px;
+  border: 1px solid #b9d5c4;
+  border-radius: 3px;
+  background: #f4fbf5;
+  color: var(--green-dark);
+  font: 11px 'DM Mono', monospace;
+  font-weight: 400;
+}
+
+.answer-improvement textarea {
+  min-height: 82px;
+}
+
+.answer-improvement-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.answer-improvement-options .checkbox-label {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.compact-action {
+  justify-self: start;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-color: var(--green);
+  background: var(--panel);
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.compact-action:hover {
+  border-color: var(--green-dark);
+  background: #eef8f0;
+}
+
+.candidate-save-action {
+  white-space: nowrap;
+}
+
+.answer-improvement-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.answer-improvement-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green-dark);
+  font: 12px 'DM Mono', monospace;
+}
+
+.answer-improvement-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #b9d5c4;
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: answer-improvement-spin 700ms linear infinite;
+}
+
+@keyframes answer-improvement-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .merged-question {
@@ -1516,6 +1623,10 @@ button:disabled {
   }
 
   .ai-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-improvement-options {
     grid-template-columns: 1fr;
   }
 

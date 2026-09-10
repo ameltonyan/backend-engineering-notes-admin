@@ -39,6 +39,13 @@ type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
 type AiGenerationMode = "main" | "batch-main" | "follow-up";
 type GeneratedQuestion = { question: string; answer: string; difficulty: Difficulty; type: QuestionType };
+type GeneratedQuestionDraft = GeneratedQuestion & { draftId: string };
+type AnswerImprovement = {
+  criteria: string;
+  humanized: boolean;
+  shortened: boolean;
+  simplified: boolean;
+};
 type GeneratedTopicSection = { title: string; description: string };
 type AiUsage = {
   promptTokens?: number;
@@ -68,6 +75,12 @@ const apiBaseUrl = (
 const credentialsKey = "backend-engineering-notes-admin:credentials";
 const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
 const maxBatchQuestionCount = 10;
+const defaultAnswerImprovement: AnswerImprovement = {
+  criteria: "",
+  humanized: false,
+  shortened: false,
+  simplified: false,
+};
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
@@ -241,9 +254,14 @@ function App() {
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
   const [aiCount, setAiCount] = useState(3);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
-  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
+  const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestion | null>(null);
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
+  const [answerImprovements, setAnswerImprovements] = useState<Record<string, AnswerImprovement>>({});
+  const [improvingAnswers, setImprovingAnswers] = useState<Record<string, boolean>>({});
+  const [answerImprovementCounts, setAnswerImprovementCounts] = useState<Record<string, number>>({});
+  const [savingGeneratedQuestions, setSavingGeneratedQuestions] = useState<Record<string, boolean>>({});
+  const [questionImprovement, setQuestionImprovement] = useState<AnswerImprovement>(defaultAnswerImprovement);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
@@ -264,10 +282,15 @@ function App() {
   const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
+  const generatedDraftSequence = useRef(0);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
   const isAiBusy = aiLoading || topicPlanLoading;
+  const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
+    ...question,
+    draftId: `generated-${++generatedDraftSequence.current}`,
+  }));
 
   useEffect(() => {
     if (!isAiBusy) {
@@ -338,7 +361,10 @@ function App() {
       (sectionOrder.get(leftSection) ?? leftPages[0]?.displayOrder ?? 0) -
       (sectionOrder.get(rightSection) ?? rightPages[0]?.displayOrder ?? 0);
     return orderDifference || leftSection.localeCompare(rightSection);
-  });
+  }).map(([section, sectionPages]) => [
+    section,
+    sectionPages.sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title)),
+  ] as [string, PageSummary[]]);
 
   const normalizedQuestionSearch = questionSearch.trim().toLowerCase();
   const orderedQuestions = [...(page?.questions ?? [])].sort(
@@ -364,15 +390,14 @@ function App() {
 
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
-    setPages(
-      list.sort((left, right) => left.displayOrder - right.displayOrder),
-    );
-    if (!selectedSlug && list[0]) setSelectedSlug(list[0].slug);
+    setPages(list);
+    return list;
   };
 
   const loadSections = async () => {
     const list = (await request("/api/admin/sections")) as Section[];
-    setSections(list.sort((left, right) => left.displayOrder - right.displayOrder));
+    setSections(list);
+    return list;
   };
 
   const getOrCreateSection = async (name: string) => {
@@ -415,7 +440,19 @@ function App() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        await Promise.all([loadPages(), loadSections()]);
+        const [loadedPages, loadedSections] = await Promise.all([loadPages(), loadSections()]);
+        if (!selectedSlug && loadedPages.length) {
+          const sectionOrder = new Map(
+            loadedSections.map((section, index) => [section.name, section.displayOrder ?? index]),
+          );
+          const firstPage = [...loadedPages].sort((left, right) => {
+            const sectionDifference =
+              (sectionOrder.get(left.section) ?? Number.MAX_SAFE_INTEGER) -
+              (sectionOrder.get(right.section) ?? Number.MAX_SAFE_INTEGER);
+            return sectionDifference || left.displayOrder - right.displayOrder || left.title.localeCompare(right.title);
+          })[0];
+          setSelectedSlug(firstPage.slug);
+        }
       } catch (err: unknown) {
         if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
           sessionStorage.removeItem(credentialsKey);
@@ -516,6 +553,7 @@ function App() {
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
+    setQuestionImprovement(defaultAnswerImprovement);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
     setIsTopicPlanOpen(false);
@@ -703,6 +741,7 @@ function App() {
     setEditingQuestionId(question.id);
     setAiGenerationMode("main");
     setAiIdea("");
+    setQuestionImprovement(defaultAnswerImprovement);
     setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
@@ -921,36 +960,50 @@ function App() {
     }
     setAiLoading(true);
     try {
-      const generationContext = aiGenerationMode === "follow-up" && selectedQuestion
-        ? `Generate follow-up questions for this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". These drafts will be saved beneath that question and should naturally deepen or challenge it.${aiIdea.trim() ? ` Additional guidance from the editor: "${aiIdea.trim()}"` : ""}`
-        : `Generate main/root interview questions for the topic and section ${page?.section} / ${page?.title}: "${aiIdea.trim()}". These drafts will not have a parent.`;
-      const editingContext = selectedQuestion && editingQuestionId !== null
-        ? `Improve this existing interview question in ${page?.section} / ${page?.title}: "${selectedQuestion.question}". Its current answer is: "${selectedQuestion.answer}". Return stronger alternative versions that preserve the intent and technical accuracy. These drafts will replace the current question only after admin review.`
-        : generationContext;
-      const result = (await request("/api/admin/ai/questions/generate", {
+      const editingExistingQuestion = editingQuestionId !== null && selectedQuestion;
+      const path = editingExistingQuestion
+        ? "/api/admin/ai/questions/improve"
+        : "/api/admin/ai/questions/generate";
+      const payload = editingExistingQuestion
+        ? {
+            question: selectedQuestion.question,
+            answer: selectedQuestion.answer,
+            criteria: aiIdea.trim() || null,
+            humanized: questionImprovement.humanized,
+            shortened: questionImprovement.shortened,
+            simplified: questionImprovement.simplified,
+            answerOnly: false,
+            difficulty: aiDifficulty,
+            type: aiType,
+          }
+        : {
+            idea: aiIdea.trim() || null,
+            parentQuestion: aiGenerationMode === "follow-up" ? selectedQuestion?.question ?? null : null,
+            parentAnswer: aiGenerationMode === "follow-up" ? selectedQuestion?.answer ?? null : null,
+            pageTitle: page?.title,
+            pageSection: page?.section,
+            pageDescription: page?.description ?? "",
+            difficulty: aiDifficulty,
+            type: aiType,
+            count: aiGenerationMode === "batch-main"
+              ? aiCount
+              : aiGenerateAlternatives
+                ? Math.min(Math.max(aiCount, 1), 2)
+                : 1,
+            existingQuestions: !aiIdea.trim() && aiGenerationMode !== "follow-up"
+              ? rootQuestions.map((question) => question.question)
+              : [],
+          };
+      const result = (await request(path, {
         method: "POST",
-        body: JSON.stringify({
-          idea: editingQuestionId !== null || aiGenerationMode === "follow-up"
-            ? editingContext
-            : aiIdea.trim(),
-          pageTitle: page?.title,
-          pageSection: page?.section,
-          pageDescription: page?.description ?? "",
-          difficulty: aiDifficulty,
-          type: aiType,
-          count: aiGenerationMode === "batch-main"
-            ? aiCount
-            : aiGenerateAlternatives
-              ? Math.min(Math.max(aiCount, 1), 2)
-              : 1,
-          existingQuestions: !aiIdea.trim() && aiGenerationMode !== "follow-up" && editingQuestionId === null
-            ? rootQuestions.map((question) => question.question)
-            : [],
-        }),
+        body: JSON.stringify(payload),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
-      setGeneratedQuestions(result.questions);
+      setGeneratedQuestions(createGeneratedDrafts(result.questions));
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
+      setAnswerImprovements({});
+      setImprovingAnswers({});
+      setAnswerImprovementCounts({});
       setAiUsage(result.usage ?? null);
       setIsAiPanelOpen(true);
       window.requestAnimationFrame(() => {
@@ -1001,7 +1054,10 @@ function App() {
       const result = (await request("/api/admin/ai/questions/merge", {
         method: "POST",
         body: JSON.stringify({
-          questions: selectedGeneratedIndexes.map((index) => generatedQuestions[index]),
+          questions: selectedGeneratedIndexes.map((index) => {
+            const { question, answer, difficulty, type } = generatedQuestions[index];
+            return { question, answer, difficulty, type };
+          }),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
       setMergedQuestion(result.questions[0] ?? null);
@@ -1051,6 +1107,89 @@ function App() {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
       itemIndex === index ? { ...item, [field]: value } : item,
     ));
+  };
+
+  const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
+    setAnswerImprovements((current) => {
+      const existing = current[draftId];
+      return {
+        ...current,
+        [draftId]: { ...(existing ?? defaultAnswerImprovement), ...update },
+      };
+    });
+  };
+
+  const improveGeneratedAnswer = async (draft: GeneratedQuestionDraft) => {
+    const improvement = answerImprovements[draft.draftId] ?? defaultAnswerImprovement;
+    setError("");
+    setImprovingAnswers((current) => ({ ...current, [draft.draftId]: true }));
+    try {
+      const { draftId: _draftId, ...draftRequest } = draft;
+      const result = (await request("/api/admin/ai/questions/improve", {
+        method: "POST",
+        body: JSON.stringify({ ...draftRequest, ...improvement, answerOnly: true }),
+      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      const improved = result.questions[0];
+      if (!improved) throw new Error("The AI did not return an improved answer.");
+      setGeneratedQuestions((current) => current.map((item) =>
+        item.draftId === draft.draftId ? { ...item, ...improved } : item,
+      ));
+      setAnswerImprovementCounts((current) => ({
+        ...current,
+        [draft.draftId]: (current[draft.draftId] ?? 0) + 1,
+      }));
+      setAiUsage(result.usage ?? null);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setImprovingAnswers((current) => ({ ...current, [draft.draftId]: false }));
+    }
+  };
+
+  const saveGeneratedQuestion = async (draft: GeneratedQuestionDraft) => {
+    if (!page || !draft.question.trim() || !draft.answer.trim()) {
+      setError("The generated question needs both a question and an answer before saving.");
+      return;
+    }
+    const editingExistingQuestion = editingQuestionId !== null && selectedQuestion;
+    const parentQuestionId = editingExistingQuestion
+      ? selectedQuestion.parentQuestionId
+      : aiGenerationMode === "follow-up"
+        ? selectedQuestion?.id ?? null
+        : null;
+    const siblingOrder = Math.max(
+      -1,
+      ...orderedQuestions
+        .filter((question) => question.parentQuestionId === parentQuestionId && question.id !== editingQuestionId)
+        .map((question) => question.displayOrder),
+    ) + 1;
+    setError("");
+    setSavingGeneratedQuestions((current) => ({ ...current, [draft.draftId]: true }));
+    try {
+      const path = editingExistingQuestion
+        ? `/api/admin/questions/${editingQuestionId}`
+        : `/api/admin/pages/${encodeURIComponent(page.slug)}/questions`;
+      await request(path, {
+        method: editingExistingQuestion ? "PUT" : "POST",
+        body: JSON.stringify({
+          question: draft.question.trim(),
+          answer: draft.answer.trim(),
+          parentQuestionId,
+          displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
+        }),
+      });
+      const removedIndex = generatedQuestions.findIndex((item) => item.draftId === draft.draftId);
+      setGeneratedQuestions((current) => current.filter((item) => item.draftId !== draft.draftId));
+      setSelectedGeneratedIndexes((current) => current
+        .filter((index) => index !== removedIndex)
+        .map((index) => index > removedIndex ? index - 1 : index));
+      await loadPage(page.slug);
+      setNotice(editingExistingQuestion ? "Question updated" : "Question saved");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingGeneratedQuestions((current) => ({ ...current, [draft.draftId]: false }));
+    }
   };
 
   const removeGeneratedQuestion = (index: number) => {
@@ -1374,8 +1513,6 @@ function App() {
           {(error || notice) && (
             <div
               className={error ? "status-banner error-banner" : "status-banner notice-banner"}
-              role={error ? "alert" : "status"}
-              aria-live="polite"
             >
               <span>{error || notice}</span>
               <button
@@ -1723,6 +1860,14 @@ function App() {
                       <p>{selectedQuestion.answer}</p>
                     </div>
                   )}
+                  {selectedQuestion && aiGenerationMode === "follow-up" && editingQuestionId === null && (
+                    <div className="ai-edit-context ai-follow-up-context">
+                      <p className="field-hint">Follow-up for</p>
+                      <strong>{selectedQuestion.question}</strong>
+                      <p className="field-hint">Current answer</p>
+                      <p>{selectedQuestion.answer}</p>
+                    </div>
+                  )}
                   {aiGenerationMode !== "follow-up" && editingQuestionId === null && rootQuestions.length > 0 && !aiIdea.trim() && (
                     <p className="field-hint">
                       {rootQuestions.length} existing initial question{rootQuestions.length === 1 ? "" : "s"} will be used to avoid duplicate coverage.
@@ -1741,6 +1886,22 @@ function App() {
                       <small className="field-hint">Leave blank to use the current page context. An idea takes priority and can intentionally overlap existing questions.</small>
                     )}
                   </label>
+                  {selectedQuestion && editingQuestionId !== null && (
+                    <div className="answer-improvement-options ai-answer-improvement-options" aria-label="Answer improvement options">
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.humanized} onChange={(event) => setQuestionImprovement((current) => ({ ...current, humanized: event.target.checked }))} />
+                        Humanized
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.shortened} onChange={(event) => setQuestionImprovement((current) => ({ ...current, shortened: event.target.checked }))} />
+                        Shorten
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={questionImprovement.simplified} onChange={(event) => setQuestionImprovement((current) => ({ ...current, simplified: event.target.checked }))} />
+                        Simplify
+                      </label>
+                    </div>
+                  )}
                   <div className="ai-fields">
                     <label>
                       Difficulty
@@ -1809,7 +1970,11 @@ function App() {
                     </div>
                     <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     {generatedQuestions.map((generated, index) => (
-                      <article className="generated-question" key={`${generated.question}-${index}`}>
+                      <article
+                        className={`generated-question${improvingAnswers[generated.draftId] ? " generated-question-improving" : ""}`}
+                        key={generated.draftId}
+                        aria-busy={Boolean(improvingAnswers[generated.draftId])}
+                      >
                         <label className="generated-select">
                           <input
                             type="checkbox"
@@ -1831,10 +1996,63 @@ function App() {
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
+                        {aiGenerationMode === "follow-up" && editingQuestionId === null && (
+                          <div className="answer-improvement">
+                            <label className="answer-improvement-label">
+                              <span>
+                                Improve this answer
+                                {answerImprovementCounts[generated.draftId] ? (
+                                  <small className="answer-improvement-count">
+                                    Improved {answerImprovementCounts[generated.draftId]}x
+                                  </small>
+                                ) : null}
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={answerImprovements[generated.draftId]?.criteria ?? ""}
+                                onChange={(event) => updateAnswerImprovement(generated.draftId, { criteria: event.target.value })}
+                                placeholder="Optional: add a production example, clarify the trade-off, or make it more direct."
+                              />
+                            </label>
+                            <div className="answer-improvement-options" aria-label={`Answer improvements for option ${index + 1}`}>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.humanized ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { humanized: event.target.checked })} />
+                                Humanized
+                              </label>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.shortened ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { shortened: event.target.checked })} />
+                                Shorten
+                              </label>
+                              <label className="checkbox-label">
+                                <input type="checkbox" checked={answerImprovements[generated.draftId]?.simplified ?? false} onChange={(event) => updateAnswerImprovement(generated.draftId, { simplified: event.target.checked })} />
+                                Simplify
+                              </label>
+                            </div>
+                            <div className="answer-improvement-actions">
+                              <button className="compact-action" type="button" disabled={Boolean(improvingAnswers[generated.draftId])} onClick={() => void improveGeneratedAnswer(generated)}>
+                                {improvingAnswers[generated.draftId] ? "Improving..." : "Improve answer"}
+                              </button>
+                              {improvingAnswers[generated.draftId] && (
+                                <span className="answer-improvement-status" role="status">
+                                  <span className="answer-improvement-spinner" aria-hidden="true" />
+                                  Revising this answer...
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <div className="actions">
                           {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
                           </button>}
+                          <button
+                            type="button"
+                            className="primary candidate-save-action"
+                            disabled={Boolean(savingGeneratedQuestions[generated.draftId])}
+                            onClick={() => void saveGeneratedQuestion(generated)}
+                          >
+                            {savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
+                          </button>
                           {aiGenerationMode === "batch-main" && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
                         </div>
                       </article>
