@@ -338,7 +338,10 @@ function App() {
       (sectionOrder.get(leftSection) ?? leftPages[0]?.displayOrder ?? 0) -
       (sectionOrder.get(rightSection) ?? rightPages[0]?.displayOrder ?? 0);
     return orderDifference || leftSection.localeCompare(rightSection);
-  });
+  }).map(([section, sectionPages]) => [
+    section,
+    sectionPages.sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title)),
+  ] as [string, PageSummary[]]);
 
   const normalizedQuestionSearch = questionSearch.trim().toLowerCase();
   const orderedQuestions = [...(page?.questions ?? [])].sort(
@@ -364,15 +367,14 @@ function App() {
 
   const loadPages = async () => {
     const list = (await request("/api/admin/pages")) as PageSummary[];
-    setPages(
-      list.sort((left, right) => left.displayOrder - right.displayOrder),
-    );
-    if (!selectedSlug && list[0]) setSelectedSlug(list[0].slug);
+    setPages(list);
+    return list;
   };
 
   const loadSections = async () => {
     const list = (await request("/api/admin/sections")) as Section[];
-    setSections(list.sort((left, right) => left.displayOrder - right.displayOrder));
+    setSections(list);
+    return list;
   };
 
   const getOrCreateSection = async (name: string) => {
@@ -415,7 +417,19 @@ function App() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        await Promise.all([loadPages(), loadSections()]);
+        const [loadedPages, loadedSections] = await Promise.all([loadPages(), loadSections()]);
+        if (!selectedSlug && loadedPages.length) {
+          const sectionOrder = new Map(
+            loadedSections.map((section, index) => [section.name, section.displayOrder ?? index]),
+          );
+          const firstPage = [...loadedPages].sort((left, right) => {
+            const sectionDifference =
+              (sectionOrder.get(left.section) ?? Number.MAX_SAFE_INTEGER) -
+              (sectionOrder.get(right.section) ?? Number.MAX_SAFE_INTEGER);
+            return sectionDifference || left.displayOrder - right.displayOrder || left.title.localeCompare(right.title);
+          })[0];
+          setSelectedSlug(firstPage.slug);
+        }
       } catch (err: unknown) {
         if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
           sessionStorage.removeItem(credentialsKey);
