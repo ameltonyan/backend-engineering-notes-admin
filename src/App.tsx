@@ -1737,6 +1737,14 @@ function App() {
                       <p>{selectedQuestion.answer}</p>
                     </div>
                   )}
+                  {selectedQuestion && aiGenerationMode === "follow-up" && editingQuestionId === null && (
+                    <div className="ai-edit-context ai-follow-up-context">
+                      <p className="field-hint">Follow-up for</p>
+                      <strong>{selectedQuestion.question}</strong>
+                      <p className="field-hint">Current answer</p>
+                      <p>{selectedQuestion.answer}</p>
+                    </div>
+                  )}
                   {aiGenerationMode !== "follow-up" && editingQuestionId === null && rootQuestions.length > 0 && !aiIdea.trim() && (
                     <p className="field-hint">
                       {rootQuestions.length} existing initial question{rootQuestions.length === 1 ? "" : "s"} will be used to avoid duplicate coverage.
