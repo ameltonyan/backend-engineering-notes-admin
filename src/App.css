@@ -822,6 +822,49 @@ input:disabled {
   margin: 26px 0 28px;
 }
 
+.page-form-heading {
+  margin-top: 26px;
+}
+
+.page-form-heading .eyebrow {
+  margin-bottom: 4px;
+}
+
+.page-form-heading span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.page-form-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.page-form-toggle {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  color: var(--green-dark);
+}
+
+.page-form-toggle::before {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 0 auto;
+  content: "";
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.page-form-toggle[aria-expanded="true"]::before {
+  transform: rotate(45deg);
+}
+
 .page-form-separator {
   margin-bottom: 28px;
   border-top: 1px solid var(--line);

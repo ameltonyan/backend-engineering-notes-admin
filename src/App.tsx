@@ -226,6 +226,7 @@ function App() {
     section: "",
     displayOrder: 0,
   });
+  const [isPageFormOpen, setIsPageFormOpen] = useState(true);
   const [questionForm, setQuestionForm] = useState<QuestionForm>({
     question: "",
     answer: "",
@@ -433,6 +434,7 @@ function App() {
       section: loaded.section,
       displayOrder: loaded.displayOrder,
     });
+    setIsPageFormOpen(false);
   };
 
   useEffect(() => {
@@ -603,6 +605,7 @@ function App() {
       section: "",
       displayOrder: pages.length,
     });
+    setIsPageFormOpen(true);
   };
 
   const openNewTopicPlan = () => {
@@ -1543,7 +1546,26 @@ function App() {
                 </button>
               )}
             </div>
-            <form className="page-form" onSubmit={handlePageSubmit}>
+            <div className="page-form-heading">
+              <div>
+                <p className="eyebrow">Page details</p>
+                <div className="page-form-summary">
+                  {page && (
+                    <button
+                      className="page-form-toggle"
+                      type="button"
+                      aria-expanded={isPageFormOpen}
+                      aria-controls="page-form"
+                      aria-label={isPageFormOpen ? "Collapse page details" : "Expand page details"}
+                      title={isPageFormOpen ? "Collapse page details" : "Expand page details"}
+                      onClick={() => setIsPageFormOpen((open) => !open)}
+                    />
+                  )}
+                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug}</span>}
+                </div>
+              </div>
+            </div>
+            {isPageFormOpen && <form className="page-form" id="page-form" onSubmit={handlePageSubmit}>
             <div className="form-fields">
               <label>
                 <span className="field-label">
@@ -1638,7 +1660,7 @@ function App() {
                 </button>
               </div>
             </div>
-            </form>
+            </form>}
             {page && <div className="page-form-separator" aria-hidden="true" />}
           </>}
           {isTopicPlanOpen && (
