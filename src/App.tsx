@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import StudyProgramEditor from "./features/study-programs/StudyProgramEditor";
+import type { StudyProgramPayload, WeeklyStudyProgram } from "./features/study-programs/types";
 import "./App.css";
 
 type PageSummary = {
@@ -47,8 +49,6 @@ type AnswerImprovement = {
   simplified: boolean;
 };
 type GeneratedTopicSection = { title: string; description: string };
-type StudyDay = { dayOfWeek: number; theme: string; pageSlugs: string[]; minutes: number; note: string };
-type WeeklyStudyProgram = { id: number; name: string; description: string | null; days: StudyDay[]; displayOrder: number };
 type AiUsage = {
   promptTokens?: number;
   completionTokens?: number;
@@ -105,10 +105,6 @@ const aiLoadingMessages = [
   "One more pass for clarity and useful production detail.",
   "The request is taking its thoughtful route through the model.",
 ];
-const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const defaultStudyDays = (): StudyDay[] => [
-  ["Java", ""], ["Concurrency", ""], ["Spring", ""], ["Databases", ""], ["System design", ""], ["Review and mock interview", "Flexible catch-up or practice."], ["Reflect and plan", "Light review, notes, and next-week planning."],
-].map(([theme, note], dayOfWeek) => ({ dayOfWeek, theme, pageSlugs: [], minutes: dayOfWeek > 4 ? 45 : 90, note }));
 
 function readCredentials() {
   return sessionStorage.getItem(credentialsKey) || "";
@@ -276,10 +272,6 @@ function App() {
   const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
   const [isStudyProgramOpen, setIsStudyProgramOpen] = useState(false);
   const [studyPrograms, setStudyPrograms] = useState<WeeklyStudyProgram[]>([]);
-  const [editingStudyProgramId, setEditingStudyProgramId] = useState<number | null>(null);
-  const [studyProgramName, setStudyProgramName] = useState("Backend interview week");
-  const [studyProgramDescription, setStudyProgramDescription] = useState("Build interview confidence through focused practice, not passive reading.");
-  const [studyProgramDays, setStudyProgramDays] = useState<StudyDay[]>(defaultStudyDays);
   const [topicPlanSection, setTopicPlanSection] = useState<Section | null>(null);
   const [topicPlanTopic, setTopicPlanTopic] = useState("");
   const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
@@ -419,19 +411,14 @@ function App() {
     return list;
   };
 
-  const openStudyProgram = (program?: WeeklyStudyProgram) => {
+  const openStudyProgram = () => {
     setIsCreateMenuOpen(false); setIsTopicPlanOpen(false); setIsStudyProgramOpen(true); setPage(null);
-    setEditingStudyProgramId(program?.id ?? null);
-    setStudyProgramName(program?.name ?? "Backend interview week");
-    setStudyProgramDescription(program?.description ?? "Build interview confidence through focused practice, not passive reading.");
-    setStudyProgramDays(program?.days ?? defaultStudyDays());
   };
 
-  const saveStudyProgram = async (event: FormEvent) => {
-    event.preventDefault(); setLoading(true); setError("");
+  const saveStudyProgram = async (programId: number | null, payload: StudyProgramPayload) => {
+    setLoading(true); setError("");
     try {
-      const payload = { name: studyProgramName, description: studyProgramDescription, days: studyProgramDays, displayOrder: editingStudyProgramId === null ? studyPrograms.length : studyPrograms.find((program) => program.id === editingStudyProgramId)?.displayOrder ?? 0 };
-      await request(editingStudyProgramId === null ? "/api/study-programs" : `/api/study-programs/${editingStudyProgramId}`, { method: editingStudyProgramId === null ? "POST" : "PUT", body: JSON.stringify(payload) });
+      await request(programId === null ? "/api/study-programs" : `/api/study-programs/${programId}`, { method: programId === null ? "POST" : "PUT", body: JSON.stringify(payload) });
       await loadStudyPrograms(); setNotice("Weekly study program published"); setIsStudyProgramOpen(false);
     } catch (err) { setError(getErrorMessage(err)); } finally { setLoading(false); }
   };
@@ -1569,21 +1556,7 @@ function App() {
               </button>
             </div>
           )}
-          {isStudyProgramOpen && <section className="topic-plan" aria-label="Weekly study program editor">
-            <div className="section-heading"><div><p className="eyebrow">Weekly study program</p><h3>{editingStudyProgramId ? "Edit published program" : "Create prepared program"}</h3><span>Each day links to existing course pages. Learners track completion and weak points in their browser.</span></div></div>
-            <form className="topic-plan-form" onSubmit={saveStudyProgram}>
-              <label>Name<input value={studyProgramName} onChange={(event) => setStudyProgramName(event.target.value)} maxLength={120} required /></label>
-              <label>Description<textarea rows={2} value={studyProgramDescription} onChange={(event) => setStudyProgramDescription(event.target.value)} maxLength={500} /></label>
-              {studyProgramDays.map((day, dayIndex) => <article className="topic-plan-candidate" key={day.dayOfWeek}>
-                <div className="topic-plan-candidate-heading"><strong>{weekDays[day.dayOfWeek]}</strong><label className="generated-edit-field">Minutes<input type="number" min={15} max={240} value={day.minutes} onChange={(event) => setStudyProgramDays((current) => current.map((item, index) => index === dayIndex ? { ...item, minutes: Number(event.target.value) } : item))} /></label></div>
-                <label>Focus<input value={day.theme} onChange={(event) => setStudyProgramDays((current) => current.map((item, index) => index === dayIndex ? { ...item, theme: event.target.value } : item))} required /></label>
-                <label>Course pages<select multiple value={day.pageSlugs} onChange={(event) => setStudyProgramDays((current) => current.map((item, index) => index === dayIndex ? { ...item, pageSlugs: Array.from(event.target.selectedOptions, (option) => option.value) } : item))}>{pages.map((pageItem) => <option key={pageItem.slug} value={pageItem.slug}>{pageItem.section} · {pageItem.title}</option>)}</select><small className="field-hint">Select one or more existing pages.</small></label>
-                <label>Guidance<textarea rows={2} value={day.note} onChange={(event) => setStudyProgramDays((current) => current.map((item, index) => index === dayIndex ? { ...item, note: event.target.value } : item))} /></label>
-              </article>)}
-              <div className="actions question-form-actions"><button className="primary" type="submit" disabled={loading}>Publish weekly program</button><button type="button" onClick={() => setIsStudyProgramOpen(false)}>Cancel</button></div>
-            </form>
-            {studyPrograms.length > 0 && <div className="topic-plan-candidates"><h4>Published programs</h4>{studyPrograms.map((program) => <div className="actions" key={program.id}><span>{program.name}</span><button type="button" onClick={() => openStudyProgram(program)}>Edit</button></div>)}</div>}
-          </section>}
+          {isStudyProgramOpen && <StudyProgramEditor pages={pages} programs={studyPrograms} loading={loading} onSave={saveStudyProgram} onClose={() => setIsStudyProgramOpen(false)} />}
           {!isStudyProgramOpen && !isTopicPlanOpen && <>
             <div className="editor-heading">
               <div>
