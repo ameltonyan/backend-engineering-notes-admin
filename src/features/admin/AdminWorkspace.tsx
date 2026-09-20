@@ -695,7 +695,7 @@ function AdminWorkspace() {
     setAiLoading(true);
     setGeneratingDetailsFor(question.id);
     try {
-      const result = (await request("/api/admin/ai/questions/details/generate", {
+      const result = (await request("/api/admin/ai/questions/example-and-code/generate", {
         method: "POST",
         body: JSON.stringify({
           question: questionForm.question,
