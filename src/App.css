@@ -1176,6 +1176,32 @@ input:disabled {
   font: 12px 'DM Mono', monospace;
 }
 
+.question-status-badge {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: 11px 'DM Mono', monospace;
+  text-transform: capitalize;
+}
+
+.question-status-badge.status-draft {
+  border-color: #b8c9e1;
+  background: #f2f6fc;
+  color: #365f98;
+}
+
+.question-status-badge.status-reviewed {
+  border-color: #e5c58c;
+  background: #fff8eb;
+  color: #9a6418;
+}
+
+.question-status-badge.status-published {
+  border-color: #a7d8b1;
+  background: #f4fbf5;
+  color: #257a3b;
+}
+
 .question-disclosures {
   display: flex;
   flex-wrap: wrap;

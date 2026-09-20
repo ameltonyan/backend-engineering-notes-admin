@@ -773,7 +773,7 @@ function AdminWorkspace() {
             <div className="selected-question-context">
               <span>{questionKind(question.depth)} · Level {question.depth}</span>
               <span>Order {question.displayOrder + 1} of {selectedSiblings.length}</span>
-              <span><strong>Publishing status:</strong> {question.status.toLowerCase()}</span>
+              <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
             </div>
             <div className="question-disclosures">
               <button
