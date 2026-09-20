@@ -9,6 +9,9 @@ import { getPage, listPages, listSections } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
 import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
+import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
+import QuestionTree from "../questions/components/QuestionTree";
+import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
 import type { AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, QuestionType } from "../questions/types";
 import StudyProgramEditor from "../study-programs/StudyProgramEditor";
 import { listStudyPrograms, saveStudyProgram as persistStudyProgram } from "../study-programs/studyProgramsApi";
@@ -24,11 +27,6 @@ const defaultAnswerImprovement: AnswerImprovement = {
   shortened: false,
   simplified: false,
 };
-const questionStatuses: { value: QuestionStatus; label: string; description: string }[] = [
-  { value: "DRAFT", label: "Draft", description: "Still being written" },
-  { value: "REVIEWED", label: "Reviewed", description: "Ready for a final check" },
-  { value: "PUBLISHED", label: "Published", description: "Visible to learners" },
-];
 type DetailGenerationMode = "EXAMPLE_AND_CODE" | "EXAMPLE_ONLY" | "CODE_ONLY";
 const detailGenerationModes: { value: DetailGenerationMode; label: string }[] = [
   { value: "EXAMPLE_AND_CODE", label: "Example + code" },
@@ -77,33 +75,6 @@ function readCollapsedSections(): Record<string, boolean> {
   } catch {
     return {};
   }
-}
-
-function QuestionStatusSelector({
-  value,
-  onChange,
-  name,
-  compact = false,
-}: {
-  value: QuestionStatus;
-  onChange: (status: QuestionStatus) => void;
-  name: string;
-  compact?: boolean;
-}) {
-  return (
-    <fieldset className={`question-status-selector${compact ? " question-status-selector-compact" : ""}`}>
-      {!compact && <legend>Publishing status</legend>}
-      <div className="question-status-options">
-        {questionStatuses.map((status) => (
-          <label className={`question-status-option${value === status.value ? " selected" : ""}`} key={status.value}>
-            <input type="radio" name={name} value={status.value} checked={value === status.value} onChange={() => onChange(status.value)} />
-            <span>{status.label}</span>
-            {!compact && <small>{status.description}</small>}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
 }
 
 function AdminWorkspace() {
@@ -295,7 +266,7 @@ function AdminWorkspace() {
       (child) => child.parentQuestionId === question.id && hasVisibleQuestion(child),
     );
   const rootQuestions = orderedQuestions.filter((question) => question.parentQuestionId === null);
-  const questionStatusCounts = questionStatuses.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
+  const questionStatusCounts = QUESTION_STATUS_OPTIONS.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
     counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
     return counts;
   }, { ALL: orderedQuestions.length, DRAFT: 0, REVIEWED: 0, PUBLISHED: 0 });
@@ -1717,7 +1688,7 @@ function AdminWorkspace() {
                   />
                 </label>
                 <div className="question-status-filter" role="group" aria-label="Filter questions by publishing status">
-                  {(["ALL", ...questionStatuses.map((status) => status.value)] as const).map((status) => (
+                  {(["ALL", ...QUESTION_STATUS_OPTIONS.map((status) => status.value)] as const).map((status) => (
                     <button
                       className={`question-status-filter-option${questionStatusFilter === status ? " selected" : ""}${status === "ALL" ? " status-all" : ` status-${status.toLowerCase()}`}`}
                       type="button"
@@ -1737,12 +1708,49 @@ function AdminWorkspace() {
                 </div>
               </div>
               <div id="question-workspace" className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
-                <div className="question-tree" aria-label="Interview question hierarchy">
-                  {rootQuestions.map((question, index) => renderQuestionNode(question, index))}
+                <QuestionTree
+                  questions={orderedQuestions}
+                  rootQuestions={rootQuestions}
+                  selectedQuestionId={selectedQuestionId}
+                  selectedSiblingIndex={selectedSiblingIndex}
+                  selectedSiblingCount={selectedSiblings.length}
+                  expandedQuestions={expandedQuestions}
+                  revealedAnswers={revealedAnswers}
+                  revealedExamples={revealedExamples}
+                  revealedCodeSnippets={revealedCodeSnippets}
+                  revealedTags={revealedTags}
+                  isAiBusy={isAiBusy}
+                  generatingDetailsFor={generatingDetailsFor}
+                  isVisible={hasVisibleQuestion}
+                  onSelect={(question, hasChildren) => {
+                    closeQuestionForm();
+                    setIsAiPanelOpen(false);
+                    closeTopicPlan();
+                    setSelectedQuestionId(question.id);
+                    setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
+                    if (hasChildren) setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
+                  }}
+                  onDeselect={() => {
+                    setSelectedQuestionId(null);
+                    closeQuestionForm();
+                    setIsAiPanelOpen(false);
+                    closeTopicPlan();
+                  }}
+                  onToggleAnswer={(id) => setRevealedAnswers((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleExample={(id) => setRevealedExamples((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleCodeSnippet={(id) => setRevealedCodeSnippets((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleTags={(id) => setRevealedTags((current) => ({ ...current, [id]: !current[id] }))}
+                  onMove={moveQuestion}
+                  onEdit={openQuestionEditor}
+                  onImprove={improveQuestionWithAi}
+                  onAddFollowUp={startQuestionCreation}
+                  onGenerateFollowUps={() => focusAiGeneration("follow-up")}
+                  onGenerateDetails={prepareDetailsGeneration}
+                  onDelete={(question, childCount) => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount })}
+                />
                   {!rootQuestions.some(hasVisibleQuestion) && (
                     <p className="muted">{page.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
                   )}
-                </div>
                 {isQuestionFormOpen && (
                   <form className={`question-form${detailsGenerationTargetId === editingQuestionId ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
                     if (detailsGenerationTargetId === editingQuestionId && !detailsGenerationReady) {
