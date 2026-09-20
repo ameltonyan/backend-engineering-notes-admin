@@ -9,6 +9,7 @@ export type GeneratedQuestion = {
   codeSnippet: string;
   difficulty: Difficulty;
   type: QuestionType;
+  tags: string[];
 };
 
 export type GeneratedQuestionDraft = GeneratedQuestion & { draftId: string };

@@ -7,7 +7,7 @@ import { clearCredentials, readCredentials, saveCredentials } from "../auth/auth
 import ContentLibrary from "../content/ContentLibrary";
 import { getPage, listPages, listSections } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
-import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, Section } from "../content/types";
+import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
 import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
 import type { AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, QuestionType } from "../questions/types";
 import StudyProgramEditor from "../study-programs/StudyProgramEditor";
@@ -47,6 +47,10 @@ const aiLoadingMessages = [
   "The request is taking its thoughtful route through the model.",
 ];
 
+const parseTags = (value: string) => [...new Set(value.split(",")
+  .map((tag) => tag.trim().toLowerCase().replace(/\s+/g, "-"))
+  .filter(Boolean))].slice(0, 8);
+
 function readCollapsedSections(): Record<string, boolean> {
   const stored = localStorage.getItem(collapsedSectionsKey);
   if (!stored) return {};
@@ -84,6 +88,8 @@ function AdminWorkspace() {
     answer: "",
     example: "",
     codeSnippet: "",
+    status: "DRAFT",
+    tags: [],
     parentQuestionId: null,
     displayOrder: 0,
   });
@@ -292,7 +298,7 @@ function AdminWorkspace() {
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
     const loaded = await getPage(slug);
     setPage(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
@@ -375,6 +381,8 @@ function AdminWorkspace() {
       answer: "",
       example: "",
       codeSnippet: "",
+      status: "DRAFT",
+      tags: [],
       parentQuestionId: parentId,
       displayOrder: siblingOrder,
     });
@@ -397,6 +405,8 @@ function AdminWorkspace() {
       answer: question.answer,
       example: question.example ?? "",
       codeSnippet: question.codeSnippet ?? "",
+      status: question.status,
+      tags: question.tags,
       parentQuestionId: question.parentQuestionId,
       displayOrder: question.displayOrder,
     });
@@ -414,7 +424,7 @@ function AdminWorkspace() {
   const closeQuestionForm = () => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
   };
 
   const closeAiPanel = () => {
@@ -657,6 +667,8 @@ function AdminWorkspace() {
         answer: question.answer,
         example: result.example,
         codeSnippet: result.codeSnippet ?? "",
+        status: question.status,
+        tags: question.tags,
         parentQuestionId: question.parentQuestionId,
         displayOrder: question.displayOrder,
       });
@@ -847,10 +859,11 @@ function AdminWorkspace() {
           answer: questionForm.answer.trim(),
           example: questionForm.example.trim() || null,
           codeSnippet: questionForm.codeSnippet.trim() || null,
+          tags: questionForm.tags,
         }),
       })) as Question;
       const wasEditing = editingQuestionId !== null;
-      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
+      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
       setIsQuestionFormOpen(false);
       setGeneratedQuestions([]);
@@ -955,6 +968,8 @@ function AdminWorkspace() {
       answer: generated.answer,
       example: generated.example,
       codeSnippet: generated.codeSnippet,
+      status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
+      tags: generated.tags,
       parentQuestionId: editingExistingQuestion ? selectedQuestion.parentQuestionId : parentId,
       displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
     });
@@ -983,8 +998,8 @@ function AdminWorkspace() {
         method: "POST",
         body: JSON.stringify({
           questions: selectedGeneratedIndexes.map((index) => {
-            const { question, answer, example, codeSnippet, difficulty, type } = generatedQuestions[index];
-            return { question, answer, example, codeSnippet, difficulty, type };
+            const { question, answer, example, codeSnippet, difficulty, type, tags } = generatedQuestions[index];
+            return { question, answer, example, codeSnippet, difficulty, type, tags };
           }),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
@@ -1016,6 +1031,8 @@ function AdminWorkspace() {
             answer: question.answer.trim(),
             example: question.example.trim() || null,
             codeSnippet: question.codeSnippet.trim() || null,
+            status: "DRAFT",
+            tags: question.tags,
             parentQuestionId: null,
             displayOrder: index,
           })),
@@ -1034,9 +1051,9 @@ function AdminWorkspace() {
     }
   };
 
-  const updateGeneratedQuestion = (index: number, field: "question" | "answer" | "example" | "codeSnippet", value: string) => {
+  const updateGeneratedQuestion = (index: number, field: "question" | "answer" | "example" | "codeSnippet" | "tags", value: string) => {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, [field]: value } : item,
+      itemIndex === index ? { ...item, [field]: field === "tags" ? parseTags(value) : value } : item,
     ));
   };
 
@@ -1062,6 +1079,7 @@ function AdminWorkspace() {
         codeSnippet: draft.codeSnippet,
         difficulty: draft.difficulty,
         type: draft.type,
+        tags: draft.tags,
       };
       const result = (await request("/api/admin/ai/questions/improve", {
         method: "POST",
@@ -1114,6 +1132,8 @@ function AdminWorkspace() {
           answer: draft.answer.trim(),
           example: draft.example.trim() || null,
           codeSnippet: draft.codeSnippet.trim() || null,
+          status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
+          tags: draft.tags,
           parentQuestionId,
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
         }),
@@ -1647,6 +1667,25 @@ function AdminWorkspace() {
                     />
                   </label>
                   <label>
+                    Tags <span className="field-hint">AI can suggest these · review and separate with commas</span>
+                    <input
+                      value={questionForm.tags.join(", ")}
+                      placeholder="java, spring, concurrency"
+                      onChange={(event) => setQuestionForm({ ...questionForm, tags: parseTags(event.target.value) })}
+                    />
+                  </label>
+                  <label>
+                    Publishing status <span className="field-hint">Only Published questions appear in the public reader</span>
+                    <select
+                      value={questionForm.status}
+                      onChange={(event) => setQuestionForm({ ...questionForm, status: event.target.value as QuestionStatus })}
+                    >
+                      <option value="DRAFT">Draft — still being written</option>
+                      <option value="REVIEWED">Reviewed — ready for final check</option>
+                      <option value="PUBLISHED">Published — visible to learners</option>
+                    </select>
+                  </label>
+                  <label>
                     Order
                     <input
                       type="number"
@@ -1837,8 +1876,13 @@ function AdminWorkspace() {
                             <span>Code snippet</span>
                             <textarea rows={4} value={generated.codeSnippet} onChange={(event) => updateGeneratedQuestion(index, "codeSnippet", event.target.value)} />
                           </label>
+                          <label className="generated-edit-field">
+                            <span>Tags</span>
+                            <input value={generated.tags.join(", ")} onChange={(event) => updateGeneratedQuestion(index, "tags", event.target.value)} />
+                          </label>
                         </> : <>
                           <p><strong>Example:</strong> {generated.example}</p>
+                          <p><strong>Tags:</strong> {generated.tags.join(", ")}</p>
                           {generated.codeSnippet && <pre><code>{generated.codeSnippet}</code></pre>}
                         </>}
                         {aiGenerationMode === "follow-up" && editingQuestionId === null && (

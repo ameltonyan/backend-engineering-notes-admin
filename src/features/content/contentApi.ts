@@ -6,4 +6,4 @@ export const listPages = () => apiRequest<PageSummary[]>("/api/admin/pages");
 export const listSections = () => apiRequest<Section[]>("/api/admin/sections");
 
 export const getPage = (slug: string) =>
-  apiRequest<Page>(`/api/pages/${encodeURIComponent(slug)}`);
+  apiRequest<Page>(`/api/admin/pages/${encodeURIComponent(slug)}`);
