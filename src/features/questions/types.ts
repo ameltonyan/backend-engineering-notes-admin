@@ -5,11 +5,17 @@ export type AiGenerationMode = "main" | "batch-main" | "follow-up";
 export type GeneratedQuestion = {
   question: string;
   answer: string;
+  example: string;
+  codeSnippet: string;
   difficulty: Difficulty;
   type: QuestionType;
+  tags: string[];
 };
 
-export type GeneratedQuestionDraft = GeneratedQuestion & { draftId: string };
+export type GeneratedQuestionDraft = GeneratedQuestion & {
+  draftId: string;
+  status: import("../content/types").QuestionStatus;
+};
 
 export type AnswerImprovement = {
   criteria: string;

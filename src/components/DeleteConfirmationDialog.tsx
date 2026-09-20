@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
+
 export type DeleteConfirmation =
-  | { type: "page"; title: string }
+  | { type: "page"; title: string; slug: string }
   | { type: "question"; id: number; title: string; childCount: number };
 
 type Props = {
@@ -10,7 +12,16 @@ type Props = {
 };
 
 function DeleteConfirmationDialog({ confirmation, loading, onCancel, onConfirm }: Props) {
+  const [confirmationText, setConfirmationText] = useState("");
+
+  useEffect(() => {
+    setConfirmationText("");
+  }, [confirmation]);
+
   if (!confirmation) return null;
+
+  const requiresTypedConfirmation = confirmation.type === "page";
+  const isConfirmed = !requiresTypedConfirmation || confirmationText.trim() === confirmation.slug;
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -24,9 +35,22 @@ function DeleteConfirmationDialog({ confirmation, loading, onCancel, onConfirm }
             : " "}
           This action cannot be undone.
         </p>
+        {requiresTypedConfirmation && (
+          <label className="delete-confirmation-input">
+            Type <code>{confirmation.slug}</code> to permanently delete this page.
+            <input
+              autoFocus
+              value={confirmationText}
+              onChange={(event) => setConfirmationText(event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="delete-confirmation-description"
+            />
+          </label>
+        )}
         <div className="modal-actions">
           <button type="button" disabled={loading} onClick={onCancel}>Cancel</button>
-          <button className="danger danger-button" type="button" disabled={loading} onClick={onConfirm}>
+          <button className="danger danger-button" type="button" disabled={loading || !isConfirmed} onClick={onConfirm}>
             {loading ? "Deleting..." : "Delete"}
           </button>
         </div>

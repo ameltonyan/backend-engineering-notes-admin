@@ -7,8 +7,11 @@ import { clearCredentials, readCredentials, saveCredentials } from "../auth/auth
 import ContentLibrary from "../content/ContentLibrary";
 import { getPage, listPages, listSections } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
-import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, Section } from "../content/types";
+import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
 import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
+import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
+import QuestionTree from "../questions/components/QuestionTree";
+import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
 import type { AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, QuestionType } from "../questions/types";
 import StudyProgramEditor from "../study-programs/StudyProgramEditor";
 import { listStudyPrograms, saveStudyProgram as persistStudyProgram } from "../study-programs/studyProgramsApi";
@@ -24,6 +27,12 @@ const defaultAnswerImprovement: AnswerImprovement = {
   shortened: false,
   simplified: false,
 };
+type DetailGenerationMode = "EXAMPLE_AND_CODE" | "EXAMPLE_ONLY" | "CODE_ONLY";
+const detailGenerationModes: { value: DetailGenerationMode; label: string }[] = [
+  { value: "EXAMPLE_AND_CODE", label: "Example + code" },
+  { value: "EXAMPLE_ONLY", label: "Example only" },
+  { value: "CODE_ONLY", label: "Code only" },
+];
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
@@ -46,6 +55,10 @@ const aiLoadingMessages = [
   "One more pass for clarity and useful production detail.",
   "The request is taking its thoughtful route through the model.",
 ];
+
+const parseTags = (value: string) => [...new Set(value.split(",")
+  .map((tag) => tag.trim().toLowerCase().replace(/\s+/g, "-"))
+  .filter(Boolean))].slice(0, 8);
 
 function readCollapsedSections(): Record<string, boolean> {
   const stored = localStorage.getItem(collapsedSectionsKey);
@@ -82,6 +95,10 @@ function AdminWorkspace() {
   const [questionForm, setQuestionForm] = useState<QuestionForm>({
     question: "",
     answer: "",
+    example: "",
+    codeSnippet: "",
+    status: "DRAFT",
+    tags: [],
     parentQuestionId: null,
     displayOrder: 0,
   });
@@ -95,8 +112,12 @@ function AdminWorkspace() {
   const [pageSearch, setPageSearch] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(readCollapsedSections);
   const [questionSearch, setQuestionSearch] = useState("");
+  const [questionStatusFilter, setQuestionStatusFilter] = useState<QuestionStatus | "ALL">("ALL");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
+  const [revealedExamples, setRevealedExamples] = useState<Record<number, boolean>>({});
+  const [revealedCodeSnippets, setRevealedCodeSnippets] = useState<Record<number, boolean>>({});
+  const [revealedTags, setRevealedTags] = useState<Record<number, boolean>>({});
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null);
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
   const [questionFieldError, setQuestionFieldError] = useState("");
@@ -117,6 +138,11 @@ function AdminWorkspace() {
   const [questionImprovement, setQuestionImprovement] = useState<AnswerImprovement>(defaultAnswerImprovement);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [generatingDetailsFor, setGeneratingDetailsFor] = useState<number | null>(null);
+  const [detailsGenerationTargetId, setDetailsGenerationTargetId] = useState<number | null>(null);
+  const [detailGenerationMode, setDetailGenerationMode] = useState<DetailGenerationMode>("EXAMPLE_AND_CODE");
+  const [detailGenerationGuidance, setDetailGenerationGuidance] = useState("");
+  const [detailsGenerationReady, setDetailsGenerationReady] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
@@ -145,6 +171,7 @@ function AdminWorkspace() {
   const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
     ...question,
     draftId: `generated-${++generatedDraftSequence.current}`,
+    status: editingQuestionId !== null && selectedQuestion ? selectedQuestion.status : "DRAFT" as QuestionStatus,
   }));
 
   useEffect(() => {
@@ -229,15 +256,20 @@ function AdminWorkspace() {
   const selectedSiblingIndex = selectedQuestion
     ? selectedSiblings.findIndex((question) => question.id === selectedQuestion.id)
     : -1;
-  const matchesQuestionSearch = (question: Question) =>
-    !normalizedQuestionSearch || [question.question, question.answer].some((value) =>
+  const matchesQuestionFilters = (question: Question) =>
+    (questionStatusFilter === "ALL" || question.status === questionStatusFilter)
+    && (!normalizedQuestionSearch || [question.question, question.answer].some((value) =>
       value.toLowerCase().includes(normalizedQuestionSearch),
-    );
+    ));
   const hasVisibleQuestion = (question: Question): boolean =>
-    matchesQuestionSearch(question) || orderedQuestions.some(
+    matchesQuestionFilters(question) || orderedQuestions.some(
       (child) => child.parentQuestionId === question.id && hasVisibleQuestion(child),
     );
   const rootQuestions = orderedQuestions.filter((question) => question.parentQuestionId === null);
+  const questionStatusCounts = QUESTION_STATUS_OPTIONS.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
+    counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
+    return counts;
+  }, { ALL: orderedQuestions.length, DRAFT: 0, REVIEWED: 0, PUBLISHED: 0 });
 
   const loadPages = async () => {
     const list = await listPages();
@@ -289,7 +321,7 @@ function AdminWorkspace() {
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
-    setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
     const loaded = await getPage(slug);
     setPage(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
@@ -367,9 +399,15 @@ function AdminWorkspace() {
     if (parentId === null) setAiGenerationMode("main");
     setSelectedQuestionId(parentId);
     setEditingQuestionId(null);
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
     setQuestionForm({
       question: "",
       answer: "",
+      example: "",
+      codeSnippet: "",
+      status: "DRAFT",
+      tags: [],
       parentQuestionId: parentId,
       displayOrder: siblingOrder,
     });
@@ -384,12 +422,18 @@ function AdminWorkspace() {
   const openQuestionEditor = (question: Question) => {
     setSelectedQuestionId(question.id);
     setEditingQuestionId(question.id);
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setQuestionForm({
       question: question.question,
       answer: question.answer,
+      example: question.example ?? "",
+      codeSnippet: question.codeSnippet ?? "",
+      status: question.status,
+      tags: question.tags,
       parentQuestionId: question.parentQuestionId,
       displayOrder: question.displayOrder,
     });
@@ -404,10 +448,29 @@ function AdminWorkspace() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const scrollToQuestion = (questionId: number | null) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = questionId === null
+          ? document.getElementById("question-workspace")
+          : document.getElementById(`question-node-${questionId}`);
+        target?.scrollIntoView({ behavior: "smooth", block: questionId === null ? "start" : "center" });
+      });
+    });
+  };
+
   const closeQuestionForm = () => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
-    setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+  };
+
+  const cancelQuestionForm = () => {
+    const questionId = editingQuestionId ?? selectedQuestionId;
+    closeQuestionForm();
+    scrollToQuestion(questionId);
   };
 
   const closeAiPanel = () => {
@@ -625,6 +688,57 @@ function AdminWorkspace() {
     });
   };
 
+  const generateDetailsWithAi = async (question: Question) => {
+    setError("");
+    setNotice("");
+    setAiLoadingMessage(aiLoadingMessages[0]);
+    setAiLoading(true);
+    setGeneratingDetailsFor(question.id);
+    try {
+      const result = (await request("/api/admin/ai/questions/example-and-code/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          question: questionForm.question,
+          answer: questionForm.answer,
+          mode: detailGenerationMode,
+          guidance: detailGenerationGuidance.trim() || null,
+        }),
+      }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage };
+      const example = result.example;
+      if (detailGenerationMode !== "CODE_ONLY" && !example?.trim()) {
+        throw new Error("The AI did not return an example.");
+      }
+      if (detailGenerationMode !== "EXAMPLE_ONLY" && !result.codeSnippet?.trim()) {
+        throw new Error("The AI did not return a code snippet.");
+      }
+
+      setQuestionForm((current) => ({
+        ...current,
+        example: detailGenerationMode === "CODE_ONLY" ? current.example : example ?? "",
+        codeSnippet: detailGenerationMode === "EXAMPLE_ONLY" ? current.codeSnippet : result.codeSnippet ?? "",
+      }));
+      setAiUsage(result.usage ?? null);
+      setDetailsGenerationReady(true);
+      setNotice("AI details are ready to review. Save to apply them.");
+      window.requestAnimationFrame(() => {
+        document.getElementById("question-example")?.focus();
+      });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
+      setGeneratingDetailsFor(null);
+    }
+  };
+
+  const prepareDetailsGeneration = (question: Question) => {
+    openQuestionEditor(question);
+    setDetailsGenerationTargetId(question.id);
+    setDetailGenerationMode("EXAMPLE_AND_CODE");
+    setDetailGenerationGuidance("");
+    setDetailsGenerationReady(false);
+  };
+
   const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
     if (!hasVisibleQuestion(question)) return null;
     const children = orderedQuestions.filter((candidate) => candidate.parentQuestionId === question.id);
@@ -663,7 +777,7 @@ function AdminWorkspace() {
             <span className="tree-node-copy">
               <strong>{question.question}</strong>
               <span className="tree-meta">
-                {questionKind(question.depth)}
+                {questionKind(question.depth)} <span className={`question-status-indicator status-${question.status.toLowerCase()}`} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
               </span>
             </span>
           </button>
@@ -673,16 +787,46 @@ function AdminWorkspace() {
             <div className="selected-question-context">
               <span>{questionKind(question.depth)} · Level {question.depth}</span>
               <span>Order {question.displayOrder + 1} of {selectedSiblings.length}</span>
+              <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
             </div>
-            <button
-              className="answer-disclosure"
-              type="button"
-              aria-expanded={Boolean(revealedAnswers[question.id])}
-              onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
-            >
-              {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
-            </button>
+            <div className="question-disclosures">
+              <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedAnswers[question.id])}
+                onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
+              </button>
+              {question.example && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedExamples[question.id])}
+                onClick={() => setRevealedExamples((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedExamples[question.id] ? "Hide example" : "Show example"}
+              </button>}
+              {question.codeSnippet && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedCodeSnippets[question.id])}
+                onClick={() => setRevealedCodeSnippets((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedCodeSnippets[question.id] ? "Hide code" : "Show code"}
+              </button>}
+              {question.tags.length > 0 && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedTags[question.id])}
+                onClick={() => setRevealedTags((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedTags[question.id] ? "Hide tags" : "Show tags"}
+              </button>}
+            </div>
             {revealedAnswers[question.id] && <p className="inline-answer">{question.answer}</p>}
+            {revealedExamples[question.id] && question.example && <p className="inline-answer inline-example">{question.example}</p>}
+            {revealedCodeSnippets[question.id] && question.codeSnippet && <pre className="inline-code-snippet"><code>{question.codeSnippet}</code></pre>}
+            {revealedTags[question.id] && question.tags.length > 0 && <div className="inline-tags">{question.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
             <div className="selected-question-actions" aria-label="Question actions">
               <div className="order-actions" aria-label="Change question order">
                 <button type="button" aria-label="Move question up" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => moveQuestion(question.id, -1)}>↑</button>
@@ -691,7 +835,10 @@ function AdminWorkspace() {
               <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
+              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups</button>
+              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => prepareDetailsGeneration(question)}>
+                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
+              </button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
             </div>
           </section>
@@ -790,23 +937,25 @@ function AdminWorkspace() {
           ...questionForm,
           question: questionForm.question.trim(),
           answer: questionForm.answer.trim(),
+          example: questionForm.example.trim() || null,
+          codeSnippet: questionForm.codeSnippet.trim() || null,
+          tags: questionForm.tags,
         }),
       })) as Question;
       const wasEditing = editingQuestionId !== null;
-      setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
+      setDetailsGenerationTargetId(null);
       setIsQuestionFormOpen(false);
       setGeneratedQuestions([]);
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
       await loadPage(page.slug);
       setSelectedQuestionId(savedQuestion.id);
-      window.requestAnimationFrame(() => {
-        document.getElementById(`question-node-${savedQuestion.id}`)?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      });
+      if (savedQuestion.parentQuestionId !== null) {
+        setExpandedQuestions((current) => ({ ...current, [savedQuestion.parentQuestionId as number]: true }));
+      }
+      scrollToQuestion(savedQuestion.id);
       setNotice(wasEditing ? "Question updated" : "Question added and selected");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -896,6 +1045,10 @@ function AdminWorkspace() {
     setQuestionForm({
       question: generated.question,
       answer: generated.answer,
+      example: generated.example,
+      codeSnippet: generated.codeSnippet,
+      status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
+      tags: generated.tags,
       parentQuestionId: editingExistingQuestion ? selectedQuestion.parentQuestionId : parentId,
       displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
     });
@@ -924,8 +1077,8 @@ function AdminWorkspace() {
         method: "POST",
         body: JSON.stringify({
           questions: selectedGeneratedIndexes.map((index) => {
-            const { question, answer, difficulty, type } = generatedQuestions[index];
-            return { question, answer, difficulty, type };
+            const { question, answer, example, codeSnippet, difficulty, type, tags } = generatedQuestions[index];
+            return { question, answer, example, codeSnippet, difficulty, type, tags };
           }),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
@@ -939,7 +1092,7 @@ function AdminWorkspace() {
     }
   };
 
-  const saveGeneratedQuestions = async (questions: GeneratedQuestion[]) => {
+  const saveGeneratedQuestions = async (questions: GeneratedQuestionDraft[]) => {
     if (!page || questions.length === 0) return;
     if (questions.some((question) => !question.question.trim() || !question.answer.trim())) {
       setError("Each generated question needs both a question and an answer before saving.");
@@ -955,6 +1108,10 @@ function AdminWorkspace() {
           questions: questions.map((question, index) => ({
             question: question.question.trim(),
             answer: question.answer.trim(),
+            example: question.example.trim() || null,
+            codeSnippet: question.codeSnippet.trim() || null,
+            status: question.status,
+            tags: question.tags,
             parentQuestionId: null,
             displayOrder: index,
           })),
@@ -973,10 +1130,14 @@ function AdminWorkspace() {
     }
   };
 
-  const updateGeneratedQuestion = (index: number, field: "question" | "answer", value: string) => {
+  const updateGeneratedQuestion = (index: number, field: "question" | "answer" | "example" | "codeSnippet" | "tags", value: string) => {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, [field]: value } : item,
+      itemIndex === index ? { ...item, [field]: field === "tags" ? parseTags(value) : value } : item,
     ));
+  };
+
+  const updateGeneratedQuestionStatus = (draftId: string, status: QuestionStatus) => {
+    setGeneratedQuestions((current) => current.map((item) => item.draftId === draftId ? { ...item, status } : item));
   };
 
   const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
@@ -997,8 +1158,11 @@ function AdminWorkspace() {
       const draftRequest: GeneratedQuestion = {
         question: draft.question,
         answer: draft.answer,
+        example: draft.example,
+        codeSnippet: draft.codeSnippet,
         difficulty: draft.difficulty,
         type: draft.type,
+        tags: draft.tags,
       };
       const result = (await request("/api/admin/ai/questions/improve", {
         method: "POST",
@@ -1049,6 +1213,10 @@ function AdminWorkspace() {
         body: JSON.stringify({
           question: draft.question.trim(),
           answer: draft.answer.trim(),
+          example: draft.example.trim() || null,
+          codeSnippet: draft.codeSnippet.trim() || null,
+          status: draft.status,
+          tags: draft.tags,
           parentQuestionId,
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
         }),
@@ -1268,7 +1436,7 @@ function AdminWorkspace() {
                 <button
                   className="danger"
                   type="button"
-                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title })}
+                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title, slug: page.slug })}
                 >
                   Delete page
                 </button>
@@ -1509,31 +1677,111 @@ function AdminWorkspace() {
                   </button>
                 </div>
               </div>
-              <label className="search-field question-search">
-                <span>Find a question</span>
-                <input
-                  type="search"
-                  value={questionSearch}
-                  onChange={(event) => setQuestionSearch(event.target.value)}
-                  placeholder="Search questions and answers"
-                />
-              </label>
-              <div className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
-                <div className="question-tree" aria-label="Interview question hierarchy">
-                  {rootQuestions.map((question, index) => renderQuestionNode(question, index))}
-                  {!rootQuestions.some(hasVisibleQuestion) && (
-                    <p className="muted">{page.questions.length ? "No questions match your search." : "No questions yet. Start with a main question."}</p>
-                  )}
+              <div className="question-filter-bar">
+                <label className="search-field question-search">
+                  <span>Find a question</span>
+                  <input
+                    type="search"
+                    value={questionSearch}
+                    onChange={(event) => setQuestionSearch(event.target.value)}
+                    placeholder="Search questions and answers"
+                  />
+                </label>
+                <div className="question-status-filter" role="group" aria-label="Filter questions by publishing status">
+                  {(["ALL", ...QUESTION_STATUS_OPTIONS.map((status) => status.value)] as const).map((status) => (
+                    <button
+                      className={`question-status-filter-option${questionStatusFilter === status ? " selected" : ""}${status === "ALL" ? " status-all" : ` status-${status.toLowerCase()}`}`}
+                      type="button"
+                      aria-pressed={questionStatusFilter === status}
+                      key={status}
+                      onClick={() => {
+                        setQuestionStatusFilter(status);
+                        if (selectedQuestion && status !== "ALL" && selectedQuestion.status !== status) {
+                          setSelectedQuestionId(null);
+                          closeQuestionForm();
+                        }
+                      }}
+                    >
+                      {status === "ALL" ? "All" : status.charAt(0) + status.slice(1).toLowerCase()} <span>{questionStatusCounts[status]}</span>
+                    </button>
+                  ))}
                 </div>
+              </div>
+              <div id="question-workspace" className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
+                <QuestionTree
+                  questions={orderedQuestions}
+                  rootQuestions={rootQuestions}
+                  selectedQuestionId={selectedQuestionId}
+                  selectedSiblingIndex={selectedSiblingIndex}
+                  selectedSiblingCount={selectedSiblings.length}
+                  expandedQuestions={expandedQuestions}
+                  revealedAnswers={revealedAnswers}
+                  revealedExamples={revealedExamples}
+                  revealedCodeSnippets={revealedCodeSnippets}
+                  revealedTags={revealedTags}
+                  isAiBusy={isAiBusy}
+                  generatingDetailsFor={generatingDetailsFor}
+                  isVisible={hasVisibleQuestion}
+                  onSelect={(question, hasChildren) => {
+                    closeQuestionForm();
+                    setIsAiPanelOpen(false);
+                    closeTopicPlan();
+                    setSelectedQuestionId(question.id);
+                    setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
+                    if (hasChildren) setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
+                  }}
+                  onDeselect={() => {
+                    setSelectedQuestionId(null);
+                    closeQuestionForm();
+                    setIsAiPanelOpen(false);
+                    closeTopicPlan();
+                  }}
+                  onToggleAnswer={(id) => setRevealedAnswers((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleExample={(id) => setRevealedExamples((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleCodeSnippet={(id) => setRevealedCodeSnippets((current) => ({ ...current, [id]: !current[id] }))}
+                  onToggleTags={(id) => setRevealedTags((current) => ({ ...current, [id]: !current[id] }))}
+                  onMove={moveQuestion}
+                  onEdit={openQuestionEditor}
+                  onImprove={improveQuestionWithAi}
+                  onAddFollowUp={startQuestionCreation}
+                  onGenerateFollowUps={() => focusAiGeneration("follow-up")}
+                  onGenerateDetails={prepareDetailsGeneration}
+                  onDelete={(question, childCount) => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount })}
+                />
+                  {!rootQuestions.some(hasVisibleQuestion) && (
+                    <p className="muted">{page.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
+                  )}
                 {isQuestionFormOpen && (
-                  <form className="question-form" id="question-editor" onSubmit={handleQuestionSubmit}>
+                  <form className={`question-form${detailsGenerationTargetId === editingQuestionId ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
+                    if (detailsGenerationTargetId === editingQuestionId && !detailsGenerationReady) {
+                      event.preventDefault();
+                      return;
+                    }
+                    void handleQuestionSubmit(event);
+                  }}>
                   <div className="question-form-heading">
                     <div>
-                      <p className="eyebrow">{editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
-                      <h3>{editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
+                      <p className="eyebrow">{detailsGenerationTargetId === editingQuestionId ? "AI enrichment" : editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
+                      <h3>{detailsGenerationTargetId === editingQuestionId ? "Add an example or code snippet" : editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
                   </div>
-                  <label>
+                  {detailsGenerationTargetId === editingQuestionId && selectedQuestion && (
+                    <div className="details-generation-prompt">
+                      <p><strong>{selectedQuestion.question}</strong><br />{selectedQuestion.answer}</p>
+                      <fieldset className="detail-generation-options">
+                        <legend>Generate</legend>
+                        {detailGenerationModes.map((mode) => <label key={mode.value} className={detailGenerationMode === mode.value ? "selected" : ""}>
+                          <input type="radio" name="detail-generation-mode" checked={detailGenerationMode === mode.value} onChange={() => { setDetailGenerationMode(mode.value); setDetailsGenerationReady(false); }} />
+                          {mode.label}
+                        </label>)}
+                      </fieldset>
+                      <label>
+                        AI guidance <span className="field-hint">Optional · describe the scenario, style, or code you want</span>
+                        <textarea rows={3} value={detailGenerationGuidance} onChange={(event) => { setDetailGenerationGuidance(event.target.value); setDetailsGenerationReady(false); }} placeholder="For example: use a production payment-service scenario and concise Java code." />
+                      </label>
+                    </div>
+                  )}
+                  <label className="normal-question-field">
                     Question
                     <input
                       id="question-input"
@@ -1549,7 +1797,7 @@ function AdminWorkspace() {
                     />
                     {questionFieldError && <small className="field-error">{questionFieldError}</small>}
                   </label>
-                  <label>
+                  <label className="normal-question-field">
                     Answer
                     <textarea
                       rows={8}
@@ -1564,7 +1812,37 @@ function AdminWorkspace() {
                       required
                     />
                   </label>
-                  <label>
+                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "CODE_ONLY") && <label>
+                    Example <span className="field-hint">Optional · use a short realistic code or production scenario</span>
+                    <textarea
+                      id="question-example"
+                      rows={5}
+                      value={questionForm.example}
+                      onChange={(event) => setQuestionForm({ ...questionForm, example: event.target.value })}
+                    />
+                  </label>}
+                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "EXAMPLE_ONLY") && <label>
+                    Code snippet <span className="field-hint">Optional · add code only when it makes the answer clearer</span>
+                    <textarea
+                      rows={5}
+                      value={questionForm.codeSnippet}
+                      onChange={(event) => setQuestionForm({ ...questionForm, codeSnippet: event.target.value })}
+                    />
+                  </label>}
+                  <label className="normal-question-field">
+                    Tags <span className="field-hint">AI can suggest these · review and separate with commas</span>
+                    <input
+                      value={questionForm.tags.join(", ")}
+                      placeholder="java, spring, concurrency"
+                      onChange={(event) => setQuestionForm({ ...questionForm, tags: parseTags(event.target.value) })}
+                    />
+                  </label>
+                  <div className="normal-question-field"><QuestionStatusSelector
+                    value={questionForm.status}
+                    onChange={(status) => setQuestionForm({ ...questionForm, status })}
+                    name="question-editor-status"
+                  /></div>
+                  <label className="normal-question-field">
                     Order
                     <input
                       type="number"
@@ -1580,10 +1858,15 @@ function AdminWorkspace() {
                     />
                   </label>
                   <div className="actions question-form-actions">
-                    <button className="primary" type="submit">
+                    {detailsGenerationTargetId === editingQuestionId ? <>
+                      <button className={detailsGenerationReady ? undefined : "primary"} type="button" disabled={isAiBusy} onClick={() => selectedQuestion && void generateDetailsWithAi(selectedQuestion)}>
+                        {generatingDetailsFor === selectedQuestion?.id ? "Generating..." : detailsGenerationReady ? "Generate again" : detailGenerationModes.find((mode) => mode.value === detailGenerationMode)?.label}
+                      </button>
+                      {detailsGenerationReady && <button className="primary" type="submit">Save details</button>}
+                    </> : <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
-                    </button>
-                    <button type="button" onClick={closeQuestionForm}>Cancel</button>
+                    </button>}
+                    <button type="button" onClick={cancelQuestionForm}>Cancel</button>
                   </div>
                   </form>
                 )}
@@ -1740,12 +2023,36 @@ function AdminWorkspace() {
                           </label>
                         ) : <strong>{generated.question}</strong>}
                         <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
+                        <QuestionStatusSelector
+                          compact
+                          value={generated.status}
+                          onChange={(status) => updateGeneratedQuestionStatus(generated.draftId, status)}
+                          name={`generated-question-status-${generated.draftId}`}
+                        />
                         {aiGenerationMode === "batch-main" ? (
                           <label className="generated-edit-field">
                             <span>Answer</span>
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
+                        {aiGenerationMode === "batch-main" ? <>
+                          <label className="generated-edit-field">
+                            <span>Example</span>
+                            <textarea rows={4} value={generated.example} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
+                          </label>
+                          <label className="generated-edit-field">
+                            <span>Code snippet</span>
+                            <textarea rows={4} value={generated.codeSnippet} onChange={(event) => updateGeneratedQuestion(index, "codeSnippet", event.target.value)} />
+                          </label>
+                          <label className="generated-edit-field">
+                            <span>Tags</span>
+                            <input value={generated.tags.join(", ")} onChange={(event) => updateGeneratedQuestion(index, "tags", event.target.value)} />
+                          </label>
+                        </> : <>
+                          <p><strong>Example:</strong> {generated.example}</p>
+                          <p><strong>Tags:</strong> {generated.tags.join(", ")}</p>
+                          {generated.codeSnippet && <pre><code>{generated.codeSnippet}</code></pre>}
+                        </>}
                         {aiGenerationMode === "follow-up" && editingQuestionId === null && (
                           <div className="answer-improvement">
                             <label className="answer-improvement-label">

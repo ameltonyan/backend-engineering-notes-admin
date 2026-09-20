@@ -40,6 +40,7 @@ function ContentLibrary({
         </div>
       </div>
       <label className="search-field"><span>Find a page</span><input type="search" value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Title, slug, or section" /></label>
+      <div className="page-list-scroll" aria-label="Content pages">
       {pagesBySection.map(([section, sectionPages]) => {
         const currentSection = sections.find((item) => item.name === section);
         const sectionIndex = currentSection ? sections.findIndex((item) => item.id === currentSection.id) : -1;
@@ -63,6 +64,7 @@ function ContentLibrary({
       })}
       {!pages.length && <p className="muted">No pages yet.</p>}
       {pages.length > 0 && !pagesBySection.length && <p className="muted">No pages match your search.</p>}
+      </div>
     </aside>
   );
 }

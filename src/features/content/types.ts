@@ -17,9 +17,15 @@ export type Question = {
   parentQuestionId: number | null;
   question: string;
   answer: string;
+  example: string | null;
+  codeSnippet: string | null;
+  status: QuestionStatus;
+  tags: string[];
   displayOrder: number;
   depth: number;
 };
+
+export type QuestionStatus = "DRAFT" | "REVIEWED" | "PUBLISHED";
 
 export type Page = PageSummary & { questions: Question[] };
 
@@ -34,6 +40,10 @@ export type PageForm = {
 export type QuestionForm = {
   question: string;
   answer: string;
+  example: string;
+  codeSnippet: string;
+  status: QuestionStatus;
+  tags: string[];
   parentQuestionId: number | null;
   displayOrder: number;
 };
