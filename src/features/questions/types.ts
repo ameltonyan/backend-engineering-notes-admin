@@ -5,6 +5,8 @@ export type AiGenerationMode = "main" | "batch-main" | "follow-up";
 export type GeneratedQuestion = {
   question: string;
   answer: string;
+  example: string;
+  codeSnippet: string;
   difficulty: Difficulty;
   type: QuestionType;
 };

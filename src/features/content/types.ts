@@ -17,6 +17,8 @@ export type Question = {
   parentQuestionId: number | null;
   question: string;
   answer: string;
+  example: string | null;
+  codeSnippet: string | null;
   displayOrder: number;
   depth: number;
 };
@@ -34,6 +36,8 @@ export type PageForm = {
 export type QuestionForm = {
   question: string;
   answer: string;
+  example: string;
+  codeSnippet: string;
   parentQuestionId: number | null;
   displayOrder: number;
 };

@@ -82,6 +82,8 @@ function AdminWorkspace() {
   const [questionForm, setQuestionForm] = useState<QuestionForm>({
     question: "",
     answer: "",
+    example: "",
+    codeSnippet: "",
     parentQuestionId: null,
     displayOrder: 0,
   });
@@ -117,6 +119,7 @@ function AdminWorkspace() {
   const [questionImprovement, setQuestionImprovement] = useState<AnswerImprovement>(defaultAnswerImprovement);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [generatingDetailsFor, setGeneratingDetailsFor] = useState<number | null>(null);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
@@ -289,7 +292,7 @@ function AdminWorkspace() {
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
-    setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
     const loaded = await getPage(slug);
     setPage(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
@@ -370,6 +373,8 @@ function AdminWorkspace() {
     setQuestionForm({
       question: "",
       answer: "",
+      example: "",
+      codeSnippet: "",
       parentQuestionId: parentId,
       displayOrder: siblingOrder,
     });
@@ -390,6 +395,8 @@ function AdminWorkspace() {
     setQuestionForm({
       question: question.question,
       answer: question.answer,
+      example: question.example ?? "",
+      codeSnippet: question.codeSnippet ?? "",
       parentQuestionId: question.parentQuestionId,
       displayOrder: question.displayOrder,
     });
@@ -407,7 +414,7 @@ function AdminWorkspace() {
   const closeQuestionForm = () => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
-    setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
   };
 
   const closeAiPanel = () => {
@@ -625,6 +632,51 @@ function AdminWorkspace() {
     });
   };
 
+  const generateDetailsWithAi = async (question: Question) => {
+    setError("");
+    setNotice("");
+    setAiLoadingMessage(aiLoadingMessages[0]);
+    setAiLoading(true);
+    setGeneratingDetailsFor(question.id);
+    try {
+      const result = (await request("/api/admin/ai/questions/details/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          question: question.question,
+          answer: question.answer,
+        }),
+      }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage };
+      if (!result.example?.trim()) {
+        throw new Error("The AI did not return an example.");
+      }
+
+      setSelectedQuestionId(question.id);
+      setEditingQuestionId(question.id);
+      setQuestionForm({
+        question: question.question,
+        answer: question.answer,
+        example: result.example,
+        codeSnippet: result.codeSnippet ?? "",
+        parentQuestionId: question.parentQuestionId,
+        displayOrder: question.displayOrder,
+      });
+      setAiUsage(result.usage ?? null);
+      setIsQuestionFormOpen(true);
+      setIsAiPanelOpen(false);
+      setIsTopicPlanOpen(false);
+      setNotice("Example and code snippet are ready to review. Save to apply them.");
+      window.requestAnimationFrame(() => {
+        document.getElementById("question-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("question-example")?.focus();
+      });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setAiLoading(false);
+      setGeneratingDetailsFor(null);
+    }
+  };
+
   const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
     if (!hasVisibleQuestion(question)) return null;
     const children = orderedQuestions.filter((candidate) => candidate.parentQuestionId === question.id);
@@ -692,6 +744,9 @@ function AdminWorkspace() {
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
               <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
+              <button type="button" disabled={isAiBusy} title="Generate a short example and optional code snippet for review" onClick={() => void generateDetailsWithAi(question)}>
+                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
+              </button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
             </div>
           </section>
@@ -790,10 +845,12 @@ function AdminWorkspace() {
           ...questionForm,
           question: questionForm.question.trim(),
           answer: questionForm.answer.trim(),
+          example: questionForm.example.trim() || null,
+          codeSnippet: questionForm.codeSnippet.trim() || null,
         }),
       })) as Question;
       const wasEditing = editingQuestionId !== null;
-      setQuestionForm({ question: "", answer: "", parentQuestionId: null, displayOrder: 0 });
+      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
       setIsQuestionFormOpen(false);
       setGeneratedQuestions([]);
@@ -896,6 +953,8 @@ function AdminWorkspace() {
     setQuestionForm({
       question: generated.question,
       answer: generated.answer,
+      example: generated.example,
+      codeSnippet: generated.codeSnippet,
       parentQuestionId: editingExistingQuestion ? selectedQuestion.parentQuestionId : parentId,
       displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
     });
@@ -924,8 +983,8 @@ function AdminWorkspace() {
         method: "POST",
         body: JSON.stringify({
           questions: selectedGeneratedIndexes.map((index) => {
-            const { question, answer, difficulty, type } = generatedQuestions[index];
-            return { question, answer, difficulty, type };
+            const { question, answer, example, codeSnippet, difficulty, type } = generatedQuestions[index];
+            return { question, answer, example, codeSnippet, difficulty, type };
           }),
         }),
       }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
@@ -955,6 +1014,8 @@ function AdminWorkspace() {
           questions: questions.map((question, index) => ({
             question: question.question.trim(),
             answer: question.answer.trim(),
+            example: question.example.trim() || null,
+            codeSnippet: question.codeSnippet.trim() || null,
             parentQuestionId: null,
             displayOrder: index,
           })),
@@ -973,7 +1034,7 @@ function AdminWorkspace() {
     }
   };
 
-  const updateGeneratedQuestion = (index: number, field: "question" | "answer", value: string) => {
+  const updateGeneratedQuestion = (index: number, field: "question" | "answer" | "example" | "codeSnippet", value: string) => {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
       itemIndex === index ? { ...item, [field]: value } : item,
     ));
@@ -997,6 +1058,8 @@ function AdminWorkspace() {
       const draftRequest: GeneratedQuestion = {
         question: draft.question,
         answer: draft.answer,
+        example: draft.example,
+        codeSnippet: draft.codeSnippet,
         difficulty: draft.difficulty,
         type: draft.type,
       };
@@ -1049,6 +1112,8 @@ function AdminWorkspace() {
         body: JSON.stringify({
           question: draft.question.trim(),
           answer: draft.answer.trim(),
+          example: draft.example.trim() || null,
+          codeSnippet: draft.codeSnippet.trim() || null,
           parentQuestionId,
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
         }),
@@ -1565,6 +1630,23 @@ function AdminWorkspace() {
                     />
                   </label>
                   <label>
+                    Example <span className="field-hint">Optional · use a short realistic code or production scenario</span>
+                    <textarea
+                      id="question-example"
+                      rows={5}
+                      value={questionForm.example}
+                      onChange={(event) => setQuestionForm({ ...questionForm, example: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Code snippet <span className="field-hint">Optional · add code only when it makes the answer clearer</span>
+                    <textarea
+                      rows={5}
+                      value={questionForm.codeSnippet}
+                      onChange={(event) => setQuestionForm({ ...questionForm, codeSnippet: event.target.value })}
+                    />
+                  </label>
+                  <label>
                     Order
                     <input
                       type="number"
@@ -1746,6 +1828,19 @@ function AdminWorkspace() {
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
+                        {aiGenerationMode === "batch-main" ? <>
+                          <label className="generated-edit-field">
+                            <span>Example</span>
+                            <textarea rows={4} value={generated.example} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
+                          </label>
+                          <label className="generated-edit-field">
+                            <span>Code snippet</span>
+                            <textarea rows={4} value={generated.codeSnippet} onChange={(event) => updateGeneratedQuestion(index, "codeSnippet", event.target.value)} />
+                          </label>
+                        </> : <>
+                          <p><strong>Example:</strong> {generated.example}</p>
+                          {generated.codeSnippet && <pre><code>{generated.codeSnippet}</code></pre>}
+                        </>}
                         {aiGenerationMode === "follow-up" && editingQuestionId === null && (
                           <div className="answer-improvement">
                             <label className="answer-improvement-label">
