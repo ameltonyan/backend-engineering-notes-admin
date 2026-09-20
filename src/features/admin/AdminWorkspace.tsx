@@ -463,10 +463,27 @@ function AdminWorkspace() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const scrollToQuestion = (questionId: number | null) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = questionId === null
+          ? document.getElementById("question-workspace")
+          : document.getElementById(`question-node-${questionId}`);
+        target?.scrollIntoView({ behavior: "smooth", block: questionId === null ? "start" : "center" });
+      });
+    });
+  };
+
   const closeQuestionForm = () => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+  };
+
+  const cancelQuestionForm = () => {
+    const questionId = editingQuestionId ?? selectedQuestionId;
+    closeQuestionForm();
+    scrollToQuestion(questionId);
   };
 
   const closeAiPanel = () => {
@@ -827,7 +844,7 @@ function AdminWorkspace() {
               <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups with AI</button>
+              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups</button>
               <button type="button" disabled={isAiBusy} title="Generate a short example and optional code snippet for review" onClick={() => void generateDetailsWithAi(question)}>
                 {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
               </button>
@@ -943,12 +960,10 @@ function AdminWorkspace() {
       setSelectedGeneratedIndexes([]);
       await loadPage(page.slug);
       setSelectedQuestionId(savedQuestion.id);
-      window.requestAnimationFrame(() => {
-        document.getElementById(`question-node-${savedQuestion.id}`)?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      });
+      if (savedQuestion.parentQuestionId !== null) {
+        setExpandedQuestions((current) => ({ ...current, [savedQuestion.parentQuestionId as number]: true }));
+      }
+      scrollToQuestion(savedQuestion.id);
       setNotice(wasEditing ? "Question updated" : "Question added and selected");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1700,7 +1715,7 @@ function AdminWorkspace() {
                   ))}
                 </div>
               </div>
-              <div className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
+              <div id="question-workspace" className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
                 <div className="question-tree" aria-label="Interview question hierarchy">
                   {rootQuestions.map((question, index) => renderQuestionNode(question, index))}
                   {!rootQuestions.some(hasVisibleQuestion) && (
@@ -1795,7 +1810,7 @@ function AdminWorkspace() {
                     <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
                     </button>
-                    <button type="button" onClick={closeQuestionForm}>Cancel</button>
+                    <button type="button" onClick={cancelQuestionForm}>Cancel</button>
                   </div>
                   </form>
                 )}
