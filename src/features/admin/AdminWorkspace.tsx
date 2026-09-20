@@ -1436,7 +1436,7 @@ function AdminWorkspace() {
                 <button
                   className="danger"
                   type="button"
-                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title })}
+                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title, slug: page.slug })}
                 >
                   Delete page
                 </button>

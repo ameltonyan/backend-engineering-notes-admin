@@ -385,6 +385,27 @@ h3 {
   color: var(--muted);
 }
 
+.delete-confirmation-input {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.delete-confirmation-input code {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--soft);
+  color: var(--red);
+  font-weight: 750;
+}
+
+.delete-confirmation-input input {
+  width: 100%;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
