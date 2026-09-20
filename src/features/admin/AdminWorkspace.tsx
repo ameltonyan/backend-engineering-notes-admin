@@ -29,6 +29,12 @@ const questionStatuses: { value: QuestionStatus; label: string; description: str
   { value: "REVIEWED", label: "Reviewed", description: "Ready for a final check" },
   { value: "PUBLISHED", label: "Published", description: "Visible to learners" },
 ];
+type DetailGenerationMode = "EXAMPLE_AND_CODE" | "EXAMPLE_ONLY" | "CODE_ONLY";
+const detailGenerationModes: { value: DetailGenerationMode; label: string }[] = [
+  { value: "EXAMPLE_AND_CODE", label: "Example + code" },
+  { value: "EXAMPLE_ONLY", label: "Example only" },
+  { value: "CODE_ONLY", label: "Code only" },
+];
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
@@ -162,6 +168,10 @@ function AdminWorkspace() {
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [generatingDetailsFor, setGeneratingDetailsFor] = useState<number | null>(null);
+  const [detailsGenerationTargetId, setDetailsGenerationTargetId] = useState<number | null>(null);
+  const [detailGenerationMode, setDetailGenerationMode] = useState<DetailGenerationMode>("EXAMPLE_AND_CODE");
+  const [detailGenerationGuidance, setDetailGenerationGuidance] = useState("");
+  const [detailsGenerationReady, setDetailsGenerationReady] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
@@ -418,6 +428,8 @@ function AdminWorkspace() {
     if (parentId === null) setAiGenerationMode("main");
     setSelectedQuestionId(parentId);
     setEditingQuestionId(null);
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
     setQuestionForm({
       question: "",
       answer: "",
@@ -439,6 +451,8 @@ function AdminWorkspace() {
   const openQuestionEditor = (question: Question) => {
     setSelectedQuestionId(question.id);
     setEditingQuestionId(question.id);
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
@@ -477,6 +491,8 @@ function AdminWorkspace() {
   const closeQuestionForm = () => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
+    setDetailsGenerationTargetId(null);
+    setDetailsGenerationReady(false);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
   };
 
@@ -711,33 +727,29 @@ function AdminWorkspace() {
       const result = (await request("/api/admin/ai/questions/details/generate", {
         method: "POST",
         body: JSON.stringify({
-          question: question.question,
-          answer: question.answer,
+          question: questionForm.question,
+          answer: questionForm.answer,
+          mode: detailGenerationMode,
+          guidance: detailGenerationGuidance.trim() || null,
         }),
       }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage };
-      if (!result.example?.trim()) {
+      const example = result.example;
+      if (detailGenerationMode !== "CODE_ONLY" && !example?.trim()) {
         throw new Error("The AI did not return an example.");
       }
+      if (detailGenerationMode !== "EXAMPLE_ONLY" && !result.codeSnippet?.trim()) {
+        throw new Error("The AI did not return a code snippet.");
+      }
 
-      setSelectedQuestionId(question.id);
-      setEditingQuestionId(question.id);
-      setQuestionForm({
-        question: question.question,
-        answer: question.answer,
-        example: result.example,
-        codeSnippet: result.codeSnippet ?? "",
-        status: question.status,
-        tags: question.tags,
-        parentQuestionId: question.parentQuestionId,
-        displayOrder: question.displayOrder,
-      });
+      setQuestionForm((current) => ({
+        ...current,
+        example: detailGenerationMode === "CODE_ONLY" ? current.example : example ?? "",
+        codeSnippet: detailGenerationMode === "EXAMPLE_ONLY" ? current.codeSnippet : result.codeSnippet ?? "",
+      }));
       setAiUsage(result.usage ?? null);
-      setIsQuestionFormOpen(true);
-      setIsAiPanelOpen(false);
-      setIsTopicPlanOpen(false);
-      setNotice("Example and code snippet are ready to review. Save to apply them.");
+      setDetailsGenerationReady(true);
+      setNotice("AI details are ready to review. Save to apply them.");
       window.requestAnimationFrame(() => {
-        document.getElementById("question-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
         document.getElementById("question-example")?.focus();
       });
     } catch (err) {
@@ -746,6 +758,14 @@ function AdminWorkspace() {
       setAiLoading(false);
       setGeneratingDetailsFor(null);
     }
+  };
+
+  const prepareDetailsGeneration = (question: Question) => {
+    openQuestionEditor(question);
+    setDetailsGenerationTargetId(question.id);
+    setDetailGenerationMode("EXAMPLE_AND_CODE");
+    setDetailGenerationGuidance("");
+    setDetailsGenerationReady(false);
   };
 
   const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
@@ -845,7 +865,7 @@ function AdminWorkspace() {
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
               <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups</button>
-              <button type="button" disabled={isAiBusy} title="Generate a short example and optional code snippet for review" onClick={() => void generateDetailsWithAi(question)}>
+              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => prepareDetailsGeneration(question)}>
                 {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
               </button>
               <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
@@ -954,6 +974,7 @@ function AdminWorkspace() {
       const wasEditing = editingQuestionId !== null;
       setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
+      setDetailsGenerationTargetId(null);
       setIsQuestionFormOpen(false);
       setGeneratedQuestions([]);
       setMergedQuestion(null);
@@ -1723,14 +1744,36 @@ function AdminWorkspace() {
                   )}
                 </div>
                 {isQuestionFormOpen && (
-                  <form className="question-form" id="question-editor" onSubmit={handleQuestionSubmit}>
+                  <form className={`question-form${detailsGenerationTargetId === editingQuestionId ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
+                    if (detailsGenerationTargetId === editingQuestionId && !detailsGenerationReady) {
+                      event.preventDefault();
+                      return;
+                    }
+                    void handleQuestionSubmit(event);
+                  }}>
                   <div className="question-form-heading">
                     <div>
-                      <p className="eyebrow">{editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
-                      <h3>{editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
+                      <p className="eyebrow">{detailsGenerationTargetId === editingQuestionId ? "AI enrichment" : editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
+                      <h3>{detailsGenerationTargetId === editingQuestionId ? "Add an example or code snippet" : editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
                   </div>
-                  <label>
+                  {detailsGenerationTargetId === editingQuestionId && selectedQuestion && (
+                    <div className="details-generation-prompt">
+                      <p><strong>{selectedQuestion.question}</strong><br />{selectedQuestion.answer}</p>
+                      <fieldset className="detail-generation-options">
+                        <legend>Generate</legend>
+                        {detailGenerationModes.map((mode) => <label key={mode.value} className={detailGenerationMode === mode.value ? "selected" : ""}>
+                          <input type="radio" name="detail-generation-mode" checked={detailGenerationMode === mode.value} onChange={() => { setDetailGenerationMode(mode.value); setDetailsGenerationReady(false); }} />
+                          {mode.label}
+                        </label>)}
+                      </fieldset>
+                      <label>
+                        AI guidance <span className="field-hint">Optional · describe the scenario, style, or code you want</span>
+                        <textarea rows={3} value={detailGenerationGuidance} onChange={(event) => { setDetailGenerationGuidance(event.target.value); setDetailsGenerationReady(false); }} placeholder="For example: use a production payment-service scenario and concise Java code." />
+                      </label>
+                    </div>
+                  )}
+                  <label className="normal-question-field">
                     Question
                     <input
                       id="question-input"
@@ -1746,7 +1789,7 @@ function AdminWorkspace() {
                     />
                     {questionFieldError && <small className="field-error">{questionFieldError}</small>}
                   </label>
-                  <label>
+                  <label className="normal-question-field">
                     Answer
                     <textarea
                       rows={8}
@@ -1761,7 +1804,7 @@ function AdminWorkspace() {
                       required
                     />
                   </label>
-                  <label>
+                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "CODE_ONLY") && <label>
                     Example <span className="field-hint">Optional · use a short realistic code or production scenario</span>
                     <textarea
                       id="question-example"
@@ -1769,16 +1812,16 @@ function AdminWorkspace() {
                       value={questionForm.example}
                       onChange={(event) => setQuestionForm({ ...questionForm, example: event.target.value })}
                     />
-                  </label>
-                  <label>
+                  </label>}
+                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "EXAMPLE_ONLY") && <label>
                     Code snippet <span className="field-hint">Optional · add code only when it makes the answer clearer</span>
                     <textarea
                       rows={5}
                       value={questionForm.codeSnippet}
                       onChange={(event) => setQuestionForm({ ...questionForm, codeSnippet: event.target.value })}
                     />
-                  </label>
-                  <label>
+                  </label>}
+                  <label className="normal-question-field">
                     Tags <span className="field-hint">AI can suggest these · review and separate with commas</span>
                     <input
                       value={questionForm.tags.join(", ")}
@@ -1786,12 +1829,12 @@ function AdminWorkspace() {
                       onChange={(event) => setQuestionForm({ ...questionForm, tags: parseTags(event.target.value) })}
                     />
                   </label>
-                  <QuestionStatusSelector
+                  <div className="normal-question-field"><QuestionStatusSelector
                     value={questionForm.status}
                     onChange={(status) => setQuestionForm({ ...questionForm, status })}
                     name="question-editor-status"
-                  />
-                  <label>
+                  /></div>
+                  <label className="normal-question-field">
                     Order
                     <input
                       type="number"
@@ -1807,9 +1850,14 @@ function AdminWorkspace() {
                     />
                   </label>
                   <div className="actions question-form-actions">
-                    <button className="primary" type="submit">
+                    {detailsGenerationTargetId === editingQuestionId ? <>
+                      <button className="primary" type="button" disabled={isAiBusy} onClick={() => selectedQuestion && void generateDetailsWithAi(selectedQuestion)}>
+                        {generatingDetailsFor === selectedQuestion?.id ? "Generating..." : detailsGenerationReady ? "Generate again" : detailGenerationModes.find((mode) => mode.value === detailGenerationMode)?.label}
+                      </button>
+                      {detailsGenerationReady && <button type="submit">Save details</button>}
+                    </> : <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
-                    </button>
+                    </button>}
                     <button type="button" onClick={cancelQuestionForm}>Cancel</button>
                   </div>
                   </form>
