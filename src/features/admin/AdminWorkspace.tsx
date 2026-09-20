@@ -24,6 +24,11 @@ const defaultAnswerImprovement: AnswerImprovement = {
   shortened: false,
   simplified: false,
 };
+const questionStatuses: { value: QuestionStatus; label: string; description: string }[] = [
+  { value: "DRAFT", label: "Draft", description: "Still being written" },
+  { value: "REVIEWED", label: "Reviewed", description: "Ready for a final check" },
+  { value: "PUBLISHED", label: "Published", description: "Visible to learners" },
+];
 const aiLoadingMessages = [
   "Consulting the silicon oracle.",
   "Teaching the model the difference between a plan and a pile of topics.",
@@ -66,6 +71,33 @@ function readCollapsedSections(): Record<string, boolean> {
   } catch {
     return {};
   }
+}
+
+function QuestionStatusSelector({
+  value,
+  onChange,
+  name,
+  compact = false,
+}: {
+  value: QuestionStatus;
+  onChange: (status: QuestionStatus) => void;
+  name: string;
+  compact?: boolean;
+}) {
+  return (
+    <fieldset className={`question-status-selector${compact ? " question-status-selector-compact" : ""}`}>
+      {!compact && <legend>Publishing status</legend>}
+      <div className="question-status-options">
+        {questionStatuses.map((status) => (
+          <label className={`question-status-option${value === status.value ? " selected" : ""}`} key={status.value}>
+            <input type="radio" name={name} value={status.value} checked={value === status.value} onChange={() => onChange(status.value)} />
+            <span>{status.label}</span>
+            {!compact && <small>{status.description}</small>}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 function AdminWorkspace() {
@@ -154,6 +186,7 @@ function AdminWorkspace() {
   const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
     ...question,
     draftId: `generated-${++generatedDraftSequence.current}`,
+    status: editingQuestionId !== null && selectedQuestion ? selectedQuestion.status : "DRAFT" as QuestionStatus,
   }));
 
   useEffect(() => {
@@ -1013,7 +1046,7 @@ function AdminWorkspace() {
     }
   };
 
-  const saveGeneratedQuestions = async (questions: GeneratedQuestion[]) => {
+  const saveGeneratedQuestions = async (questions: GeneratedQuestionDraft[]) => {
     if (!page || questions.length === 0) return;
     if (questions.some((question) => !question.question.trim() || !question.answer.trim())) {
       setError("Each generated question needs both a question and an answer before saving.");
@@ -1031,7 +1064,7 @@ function AdminWorkspace() {
             answer: question.answer.trim(),
             example: question.example.trim() || null,
             codeSnippet: question.codeSnippet.trim() || null,
-            status: "DRAFT",
+            status: question.status,
             tags: question.tags,
             parentQuestionId: null,
             displayOrder: index,
@@ -1055,6 +1088,10 @@ function AdminWorkspace() {
     setGeneratedQuestions((current) => current.map((item, itemIndex) =>
       itemIndex === index ? { ...item, [field]: field === "tags" ? parseTags(value) : value } : item,
     ));
+  };
+
+  const updateGeneratedQuestionStatus = (draftId: string, status: QuestionStatus) => {
+    setGeneratedQuestions((current) => current.map((item) => item.draftId === draftId ? { ...item, status } : item));
   };
 
   const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
@@ -1132,7 +1169,7 @@ function AdminWorkspace() {
           answer: draft.answer.trim(),
           example: draft.example.trim() || null,
           codeSnippet: draft.codeSnippet.trim() || null,
-          status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
+          status: draft.status,
           tags: draft.tags,
           parentQuestionId,
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
@@ -1674,17 +1711,11 @@ function AdminWorkspace() {
                       onChange={(event) => setQuestionForm({ ...questionForm, tags: parseTags(event.target.value) })}
                     />
                   </label>
-                  <label>
-                    Publishing status <span className="field-hint">Only Published questions appear in the public reader</span>
-                    <select
-                      value={questionForm.status}
-                      onChange={(event) => setQuestionForm({ ...questionForm, status: event.target.value as QuestionStatus })}
-                    >
-                      <option value="DRAFT">Draft — still being written</option>
-                      <option value="REVIEWED">Reviewed — ready for final check</option>
-                      <option value="PUBLISHED">Published — visible to learners</option>
-                    </select>
-                  </label>
+                  <QuestionStatusSelector
+                    value={questionForm.status}
+                    onChange={(status) => setQuestionForm({ ...questionForm, status })}
+                    name="question-editor-status"
+                  />
                   <label>
                     Order
                     <input
@@ -1861,6 +1892,12 @@ function AdminWorkspace() {
                           </label>
                         ) : <strong>{generated.question}</strong>}
                         <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
+                        <QuestionStatusSelector
+                          compact
+                          value={generated.status}
+                          onChange={(status) => updateGeneratedQuestionStatus(generated.draftId, status)}
+                          name={`generated-question-status-${generated.draftId}`}
+                        />
                         {aiGenerationMode === "batch-main" ? (
                           <label className="generated-edit-field">
                             <span>Answer</span>

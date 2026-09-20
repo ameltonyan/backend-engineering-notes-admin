@@ -12,7 +12,10 @@ export type GeneratedQuestion = {
   tags: string[];
 };
 
-export type GeneratedQuestionDraft = GeneratedQuestion & { draftId: string };
+export type GeneratedQuestionDraft = GeneratedQuestion & {
+  draftId: string;
+  status: import("../content/types").QuestionStatus;
+};
 
 export type AnswerImprovement = {
   criteria: string;
