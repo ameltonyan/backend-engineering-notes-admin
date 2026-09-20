@@ -137,6 +137,9 @@ function AdminWorkspace() {
   const [questionSearch, setQuestionSearch] = useState("");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
+  const [revealedExamples, setRevealedExamples] = useState<Record<number, boolean>>({});
+  const [revealedCodeSnippets, setRevealedCodeSnippets] = useState<Record<number, boolean>>({});
+  const [revealedTags, setRevealedTags] = useState<Record<number, boolean>>({});
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null);
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
   const [questionFieldError, setQuestionFieldError] = useState("");
@@ -770,16 +773,46 @@ function AdminWorkspace() {
             <div className="selected-question-context">
               <span>{questionKind(question.depth)} · Level {question.depth}</span>
               <span>Order {question.displayOrder + 1} of {selectedSiblings.length}</span>
+              <span><strong>Publishing status:</strong> {question.status.toLowerCase()}</span>
             </div>
-            <button
-              className="answer-disclosure"
-              type="button"
-              aria-expanded={Boolean(revealedAnswers[question.id])}
-              onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
-            >
-              {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
-            </button>
+            <div className="question-disclosures">
+              <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedAnswers[question.id])}
+                onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
+              </button>
+              {question.example && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedExamples[question.id])}
+                onClick={() => setRevealedExamples((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedExamples[question.id] ? "Hide example" : "Show example"}
+              </button>}
+              {question.codeSnippet && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedCodeSnippets[question.id])}
+                onClick={() => setRevealedCodeSnippets((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedCodeSnippets[question.id] ? "Hide code" : "Show code"}
+              </button>}
+              {question.tags.length > 0 && <button
+                className="answer-disclosure"
+                type="button"
+                aria-expanded={Boolean(revealedTags[question.id])}
+                onClick={() => setRevealedTags((current) => ({ ...current, [question.id]: !current[question.id] }))}
+              >
+                {revealedTags[question.id] ? "Hide tags" : "Show tags"}
+              </button>}
+            </div>
             {revealedAnswers[question.id] && <p className="inline-answer">{question.answer}</p>}
+            {revealedExamples[question.id] && question.example && <p className="inline-answer inline-example">{question.example}</p>}
+            {revealedCodeSnippets[question.id] && question.codeSnippet && <pre className="inline-code-snippet"><code>{question.codeSnippet}</code></pre>}
+            {revealedTags[question.id] && question.tags.length > 0 && <div className="inline-tags">{question.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
             <div className="selected-question-actions" aria-label="Question actions">
               <div className="order-actions" aria-label="Change question order">
                 <button type="button" aria-label="Move question up" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => moveQuestion(question.id, -1)}>↑</button>
