@@ -135,6 +135,7 @@ function AdminWorkspace() {
   const [pageSearch, setPageSearch] = useState("");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(readCollapsedSections);
   const [questionSearch, setQuestionSearch] = useState("");
+  const [questionStatusFilter, setQuestionStatusFilter] = useState<QuestionStatus | "ALL">("ALL");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
   const [revealedExamples, setRevealedExamples] = useState<Record<number, boolean>>({});
@@ -274,15 +275,20 @@ function AdminWorkspace() {
   const selectedSiblingIndex = selectedQuestion
     ? selectedSiblings.findIndex((question) => question.id === selectedQuestion.id)
     : -1;
-  const matchesQuestionSearch = (question: Question) =>
-    !normalizedQuestionSearch || [question.question, question.answer].some((value) =>
+  const matchesQuestionFilters = (question: Question) =>
+    (questionStatusFilter === "ALL" || question.status === questionStatusFilter)
+    && (!normalizedQuestionSearch || [question.question, question.answer].some((value) =>
       value.toLowerCase().includes(normalizedQuestionSearch),
-    );
+    ));
   const hasVisibleQuestion = (question: Question): boolean =>
-    matchesQuestionSearch(question) || orderedQuestions.some(
+    matchesQuestionFilters(question) || orderedQuestions.some(
       (child) => child.parentQuestionId === question.id && hasVisibleQuestion(child),
     );
   const rootQuestions = orderedQuestions.filter((question) => question.parentQuestionId === null);
+  const questionStatusCounts = questionStatuses.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
+    counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
+    return counts;
+  }, { ALL: orderedQuestions.length, DRAFT: 0, REVIEWED: 0, PUBLISHED: 0 });
 
   const loadPages = async () => {
     const list = await listPages();
@@ -763,7 +769,7 @@ function AdminWorkspace() {
             <span className="tree-node-copy">
               <strong>{question.question}</strong>
               <span className="tree-meta">
-                {questionKind(question.depth)}
+                {questionKind(question.depth)} <span className={`question-status-indicator status-${question.status.toLowerCase()}`} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
               </span>
             </span>
           </button>
@@ -1664,20 +1670,41 @@ function AdminWorkspace() {
                   </button>
                 </div>
               </div>
-              <label className="search-field question-search">
-                <span>Find a question</span>
-                <input
-                  type="search"
-                  value={questionSearch}
-                  onChange={(event) => setQuestionSearch(event.target.value)}
-                  placeholder="Search questions and answers"
-                />
-              </label>
+              <div className="question-filter-bar">
+                <label className="search-field question-search">
+                  <span>Find a question</span>
+                  <input
+                    type="search"
+                    value={questionSearch}
+                    onChange={(event) => setQuestionSearch(event.target.value)}
+                    placeholder="Search questions and answers"
+                  />
+                </label>
+                <div className="question-status-filter" role="group" aria-label="Filter questions by publishing status">
+                  {(["ALL", ...questionStatuses.map((status) => status.value)] as const).map((status) => (
+                    <button
+                      className={`question-status-filter-option${questionStatusFilter === status ? " selected" : ""}${status === "ALL" ? " status-all" : ` status-${status.toLowerCase()}`}`}
+                      type="button"
+                      aria-pressed={questionStatusFilter === status}
+                      key={status}
+                      onClick={() => {
+                        setQuestionStatusFilter(status);
+                        if (selectedQuestion && status !== "ALL" && selectedQuestion.status !== status) {
+                          setSelectedQuestionId(null);
+                          closeQuestionForm();
+                        }
+                      }}
+                    >
+                      {status === "ALL" ? "All" : status.charAt(0) + status.slice(1).toLowerCase()} <span>{questionStatusCounts[status]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
                 <div className="question-tree" aria-label="Interview question hierarchy">
                   {rootQuestions.map((question, index) => renderQuestionNode(question, index))}
                   {!rootQuestions.some(hasVisibleQuestion) && (
-                    <p className="muted">{page.questions.length ? "No questions match your search." : "No questions yet. Start with a main question."}</p>
+                    <p className="muted">{page.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
                   )}
                 </div>
                 {isQuestionFormOpen && (

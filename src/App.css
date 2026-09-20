@@ -1139,6 +1139,32 @@ input:disabled {
   overflow-wrap: anywhere;
 }
 
+.tree-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.question-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+.question-status-indicator.status-draft {
+  background: #7793bc;
+}
+
+.question-status-indicator.status-reviewed {
+  background: #c58a36;
+}
+
+.question-status-indicator.status-published {
+  background: #3b9553;
+}
+
 .tree-meta,
 .candidate-meta,
 .inspector-meta {
@@ -1340,7 +1366,64 @@ input:disabled {
 }
 
 .question-search {
+  margin: 0;
+}
+
+.question-filter-bar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   margin: 18px 0 0;
+}
+
+.question-filter-bar .question-search {
+  flex: 1 1 260px;
+}
+
+.question-status-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.question-status-filter-option {
+  padding: 6px 8px;
+  border-color: var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.question-status-filter-option span {
+  margin-left: 3px;
+  opacity: .72;
+  font: 11px 'DM Mono', monospace;
+}
+
+.question-status-filter-option.selected.status-all {
+  border-color: #7d8a94;
+  background: #f4f6f7;
+  color: var(--ink);
+}
+
+.question-status-filter-option.selected.status-draft {
+  border-color: #7793bc;
+  background: #f2f6fc;
+  color: #365f98;
+}
+
+.question-status-filter-option.selected.status-reviewed {
+  border-color: #c58a36;
+  background: #fff8eb;
+  color: #9a6418;
+}
+
+.question-status-filter-option.selected.status-published {
+  border-color: var(--green);
+  background: #f4fbf5;
+  color: #257a3b;
 }
 
 .ai-assist {
