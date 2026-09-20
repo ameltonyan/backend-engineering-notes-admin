@@ -1851,10 +1851,10 @@ function AdminWorkspace() {
                   </label>
                   <div className="actions question-form-actions">
                     {detailsGenerationTargetId === editingQuestionId ? <>
-                      <button className="primary" type="button" disabled={isAiBusy} onClick={() => selectedQuestion && void generateDetailsWithAi(selectedQuestion)}>
+                      <button className={detailsGenerationReady ? undefined : "primary"} type="button" disabled={isAiBusy} onClick={() => selectedQuestion && void generateDetailsWithAi(selectedQuestion)}>
                         {generatingDetailsFor === selectedQuestion?.id ? "Generating..." : detailsGenerationReady ? "Generate again" : detailGenerationModes.find((mode) => mode.value === detailGenerationMode)?.label}
                       </button>
-                      {detailsGenerationReady && <button type="submit">Save details</button>}
+                      {detailsGenerationReady && <button className="primary" type="submit">Save details</button>}
                     </> : <button className="primary" type="submit">
                       {editingQuestionId ? "Save question" : "Add question"}
                     </button>}
