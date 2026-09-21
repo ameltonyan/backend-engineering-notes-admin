@@ -250,6 +250,7 @@ function AdminWorkspace() {
   );
   const questionById = new Map(orderedQuestions.map((question) => [question.id, question]));
   const selectedQuestion = selectedQuestionId ? questionById.get(selectedQuestionId) : undefined;
+  const isDetailsGeneration = detailsGenerationTargetId !== null && detailsGenerationTargetId === editingQuestionId;
   const selectedSiblings = selectedQuestion
     ? orderedQuestions.filter((question) => question.parentQuestionId === selectedQuestion.parentQuestionId)
     : [];
@@ -1752,8 +1753,8 @@ function AdminWorkspace() {
                     <p className="muted">{page.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
                   )}
                 {isQuestionFormOpen && (
-                  <form className={`question-form${detailsGenerationTargetId === editingQuestionId ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
-                    if (detailsGenerationTargetId === editingQuestionId && !detailsGenerationReady) {
+                  <form className={`question-form${isDetailsGeneration ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
+                    if (isDetailsGeneration && !detailsGenerationReady) {
                       event.preventDefault();
                       return;
                     }
@@ -1761,11 +1762,11 @@ function AdminWorkspace() {
                   }}>
                   <div className="question-form-heading">
                     <div>
-                      <p className="eyebrow">{detailsGenerationTargetId === editingQuestionId ? "AI enrichment" : editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
-                      <h3>{detailsGenerationTargetId === editingQuestionId ? "Add an example or code snippet" : editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
+                      <p className="eyebrow">{isDetailsGeneration ? "AI enrichment" : editingQuestionId ? "Editing saved question" : "Draft interview question"}</p>
+                      <h3>{isDetailsGeneration ? "Add an example or code snippet" : editingQuestionId ? "Edit question" : questionForm.parentQuestionId ? "Add follow-up" : "Add main question"}</h3>
                     </div>
                   </div>
-                  {detailsGenerationTargetId === editingQuestionId && selectedQuestion && (
+                  {isDetailsGeneration && selectedQuestion && (
                     <div className="details-generation-prompt">
                       <p><strong>{selectedQuestion.question}</strong><br />{selectedQuestion.answer}</p>
                       <fieldset className="detail-generation-options">
@@ -1812,7 +1813,7 @@ function AdminWorkspace() {
                       required
                     />
                   </label>
-                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "CODE_ONLY") && <label>
+                  {(!isDetailsGeneration || detailGenerationMode !== "CODE_ONLY") && <label>
                     Example <span className="field-hint">Optional · use a short realistic code or production scenario</span>
                     <textarea
                       id="question-example"
@@ -1821,7 +1822,7 @@ function AdminWorkspace() {
                       onChange={(event) => setQuestionForm({ ...questionForm, example: event.target.value })}
                     />
                   </label>}
-                  {(detailsGenerationTargetId !== editingQuestionId || detailGenerationMode !== "EXAMPLE_ONLY") && <label>
+                  {(!isDetailsGeneration || detailGenerationMode !== "EXAMPLE_ONLY") && <label>
                     Code snippet <span className="field-hint">Optional · add code only when it makes the answer clearer</span>
                     <textarea
                       rows={5}
@@ -1858,7 +1859,7 @@ function AdminWorkspace() {
                     />
                   </label>
                   <div className="actions question-form-actions">
-                    {detailsGenerationTargetId === editingQuestionId ? <>
+                    {isDetailsGeneration ? <>
                       <button className={detailsGenerationReady ? undefined : "primary"} type="button" disabled={isAiBusy} onClick={() => selectedQuestion && void generateDetailsWithAi(selectedQuestion)}>
                         {generatingDetailsFor === selectedQuestion?.id ? "Generating..." : detailsGenerationReady ? "Generate again" : detailGenerationModes.find((mode) => mode.value === detailGenerationMode)?.label}
                       </button>
