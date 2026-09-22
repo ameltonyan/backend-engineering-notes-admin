@@ -1,4 +1,5 @@
 import type { PageSummary, Section } from "./types";
+import type { Difficulty } from "../questions/types";
 
 type Props = {
   pages: PageSummary[];
@@ -9,6 +10,8 @@ type Props = {
   collapsedSections: Record<string, boolean>;
   createMenuOpen: boolean;
   loading: boolean;
+  difficulty: Difficulty;
+  onDifficultyChange: (difficulty: Difficulty) => void;
   onSearchChange: (value: string) => void;
   onToggleCreateMenu: () => void;
   onNewPage: () => void;
@@ -22,7 +25,8 @@ type Props = {
 };
 
 function ContentLibrary({
-  pages, sections, pagesBySection, selectedSlug, search, collapsedSections, createMenuOpen, loading,
+  pages, sections, pagesBySection, selectedSlug, search, collapsedSections, createMenuOpen, loading, difficulty,
+  onDifficultyChange,
   onSearchChange, onToggleCreateMenu, onNewPage, onNewTopicPlan, onOpenStudyProgram, onToggleSection,
   onSelectPage, onMoveSection, onMovePage, onOpenTopicPlan,
 }: Props) {
@@ -39,6 +43,16 @@ function ContentLibrary({
           </div>}
         </div>
       </div>
+      <label className="content-level-filter">
+        <span>Content difficulty</span>
+        <select value={difficulty} onChange={(event) => onDifficultyChange(event.target.value as Difficulty)} disabled={loading}>
+          <option value="BEGINNER">Beginner</option>
+          <option value="INTERMEDIATE">Intermediate</option>
+          <option value="ADVANCED">Advanced</option>
+          <option value="EXPERT">Expert</option>
+        </select>
+        <small>Questions shown and newly created use this level.</small>
+      </label>
       <label className="search-field"><span>Find a page</span><input type="search" value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Title, slug, or section" /></label>
       <div className="page-list-scroll" aria-label="Content pages">
       {pagesBySection.map(([section, sectionPages]) => {

@@ -492,6 +492,12 @@ input:disabled {
   background: #edf0eb;
 }
 
+select:disabled {
+  color: var(--muted);
+  background: #edf0eb;
+  cursor: not-allowed;
+}
+
 .field-hint {
   color: var(--muted);
   font-size: 12px;
@@ -544,7 +550,7 @@ input:disabled {
     position: sticky;
     top: 20px;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 16px;
     max-height: calc(100dvh - 40px);
     min-height: 0;
@@ -557,6 +563,25 @@ input:disabled {
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
   }
+}
+
+.content-level-filter {
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.content-level-filter select {
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, .7);
+}
+
+.content-level-filter small {
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .list-heading,

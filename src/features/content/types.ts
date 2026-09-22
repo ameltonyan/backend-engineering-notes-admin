@@ -1,3 +1,5 @@
+import type { Difficulty } from "../questions/types";
+
 export type PageSummary = {
   slug: string;
   title: string;
@@ -19,6 +21,7 @@ export type Question = {
   answer: string;
   example: string | null;
   codeSnippet: string | null;
+  difficulty: Difficulty;
   status: QuestionStatus;
   tags: string[];
   displayOrder: number;
@@ -42,6 +45,7 @@ export type QuestionForm = {
   answer: string;
   example: string;
   codeSnippet: string;
+  difficulty: Difficulty;
   status: QuestionStatus;
   tags: string[];
   parentQuestionId: number | null;
