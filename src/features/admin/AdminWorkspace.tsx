@@ -1981,8 +1981,8 @@ function AdminWorkspace() {
                     </div>
                   )}
                   <div className="ai-fields">
-                    <label>
-                      Difficulty
+                    <label className="ai-field">
+                      <span className="ai-field-label">Difficulty</span>
                       <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from content difficulty">
                         <option value="BEGINNER">Beginner</option>
                         <option value="INTERMEDIATE">Intermediate</option>
@@ -1991,8 +1991,8 @@ function AdminWorkspace() {
                       </select>
                       <small className="field-hint">Inherited from the selected content difficulty.</small>
                     </label>
-                    <label>
-                      Type
+                    <label className="ai-field">
+                      <span className="ai-field-label">Type</span>
                       <select value={aiType} onChange={(event) => setAiType(event.target.value as QuestionType)}>
                         <option value="CONCEPTUAL">Conceptual</option>
                         <option value="CODE">Code</option>
@@ -2004,8 +2004,8 @@ function AdminWorkspace() {
                       </select>
                     </label>
                     {aiGenerationMode === "batch-main" && (
-                      <label>
-                        Number of questions
+                      <label className="ai-field">
+                        <span className="ai-field-label">Number of questions</span>
                         <input
                           type="number"
                           min={1}
@@ -2016,7 +2016,8 @@ function AdminWorkspace() {
                       </label>
                     )}
                     {aiGenerationMode !== "batch-main" && (
-                      <div className="ai-alternatives-field">
+                      <div className="ai-field ai-alternatives-field">
+                        <span className="ai-field-label">Options</span>
                         <label className="checkbox-label">
                           <input
                             type="checkbox"
