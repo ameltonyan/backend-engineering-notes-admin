@@ -12,7 +12,7 @@ import { descendantCount, questionKind, questionPreview } from "../questions/que
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
-import type { AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, QuestionType } from "../questions/types";
+import type { AiGenerationMetadata, AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, GeneratedQuestionsResult, QuestionType } from "../questions/types";
 import StudyProgramEditor from "../study-programs/StudyProgramEditor";
 import AiProviderSelector from "../settings/AiProviderSelector";
 import { listStudyPrograms, saveStudyProgram as persistStudyProgram } from "../study-programs/studyProgramsApi";
@@ -108,6 +108,7 @@ function AdminWorkspace() {
     difficulty: selectedDifficulty,
     status: "DRAFT",
     tags: [],
+    aiGenerationRunId: null,
     parentQuestionId: null,
     displayOrder: 0,
   });
@@ -137,7 +138,7 @@ function AdminWorkspace() {
   const [aiCount, setAiCount] = useState(3);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
-  const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestion | null>(null);
+  const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestionDraft | null>(null);
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
   const [answerImprovements, setAnswerImprovements] = useState<Record<string, AnswerImprovement>>({});
   const [improvingAnswers, setImprovingAnswers] = useState<Record<string, boolean>>({});
@@ -176,11 +177,12 @@ function AdminWorkspace() {
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
   const isAiBusy = aiLoading || topicPlanLoading;
-  const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
+  const createGeneratedDrafts = (questions: GeneratedQuestion[], generation: AiGenerationMetadata) => questions.map((question) => ({
     ...question,
     difficulty: selectedDifficulty,
     draftId: `generated-${++generatedDraftSequence.current}`,
     status: editingQuestionId !== null && selectedQuestion ? selectedQuestion.status : "DRAFT" as QuestionStatus,
+    generation,
   }));
 
   useEffect(() => {
@@ -335,7 +337,7 @@ function AdminWorkspace() {
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
     const loaded = await getPage(slug, difficulty);
     setPage(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
@@ -423,6 +425,7 @@ function AdminWorkspace() {
       difficulty: selectedDifficulty,
       status: "DRAFT",
       tags: [],
+      aiGenerationRunId: null,
       parentQuestionId: parentId,
       displayOrder: siblingOrder,
     });
@@ -450,6 +453,7 @@ function AdminWorkspace() {
       difficulty: question.difficulty,
       status: question.status,
       tags: question.tags,
+      aiGenerationRunId: question.aiGenerationRunId,
       parentQuestionId: question.parentQuestionId,
       displayOrder: question.displayOrder,
     });
@@ -480,7 +484,7 @@ function AdminWorkspace() {
     setEditingQuestionId(null);
     setDetailsGenerationTargetId(null);
     setDetailsGenerationReady(false);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
   };
 
   const cancelQuestionForm = () => {
@@ -719,7 +723,7 @@ function AdminWorkspace() {
           mode: detailGenerationMode,
           guidance: detailGenerationGuidance.trim() || null,
         }),
-      }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage };
+      }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage; generation: AiGenerationMetadata };
       const example = result.example;
       if (detailGenerationMode !== "CODE_ONLY" && !example?.trim()) {
         throw new Error("The AI did not return an example.");
@@ -732,6 +736,7 @@ function AdminWorkspace() {
         ...current,
         example: detailGenerationMode === "CODE_ONLY" ? current.example : example ?? "",
         codeSnippet: detailGenerationMode === "EXAMPLE_ONLY" ? current.codeSnippet : result.codeSnippet ?? "",
+        aiGenerationRunId: result.generation.generationRunId,
       }));
       setAiUsage(result.usage ?? null);
       setDetailsGenerationReady(true);
@@ -959,7 +964,7 @@ function AdminWorkspace() {
         }),
       })) as Question;
       const wasEditing = editingQuestionId !== null;
-      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
       setDetailsGenerationTargetId(null);
       setIsQuestionFormOpen(false);
@@ -1030,8 +1035,8 @@ function AdminWorkspace() {
       const result = (await request(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
-      setGeneratedQuestions(createGeneratedDrafts(result.questions));
+      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      setGeneratedQuestions(createGeneratedDrafts(result.questions, result.generation));
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
       setAnswerImprovements({});
@@ -1049,7 +1054,7 @@ function AdminWorkspace() {
     }
   };
 
-  const editGeneratedQuestion = (generated: GeneratedQuestion) => {
+  const editGeneratedQuestion = (generated: GeneratedQuestionDraft) => {
     const parentId = aiGenerationMode === "follow-up" ? selectedQuestion?.id ?? null : null;
     const editingExistingQuestion = editingQuestionId !== null && selectedQuestion;
     const siblingOrder = Math.max(
@@ -1066,6 +1071,7 @@ function AdminWorkspace() {
       difficulty: generated.difficulty,
       status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
       tags: generated.tags,
+      aiGenerationRunId: generated.generation.generationRunId,
       parentQuestionId: editingExistingQuestion ? selectedQuestion.parentQuestionId : parentId,
       displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
     });
@@ -1098,8 +1104,8 @@ function AdminWorkspace() {
             return { question, answer, example, codeSnippet, difficulty, type, tags };
           }),
         }),
-      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
-      setMergedQuestion(result.questions[0] ?? null);
+      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      setMergedQuestion(createGeneratedDrafts(result.questions, result.generation)[0] ?? null);
       setSelectedGeneratedIndexes([]);
       setAiUsage(result.usage ?? null);
     } catch (err) {
@@ -1130,6 +1136,7 @@ function AdminWorkspace() {
             difficulty: question.difficulty,
             status: question.status,
             tags: question.tags,
+            aiGenerationRunId: question.generation.generationRunId,
             parentQuestionId: null,
             displayOrder: index,
           })),
@@ -1185,11 +1192,11 @@ function AdminWorkspace() {
       const result = (await request("/api/admin/ai/questions/improve", {
         method: "POST",
         body: JSON.stringify({ ...draftRequest, ...improvement, answerOnly: true }),
-      }, undefined, 180_000)) as { questions: GeneratedQuestion[]; usage?: AiUsage };
+      }, undefined, 180_000)) as GeneratedQuestionsResult;
       const improved = result.questions[0];
       if (!improved) throw new Error("The AI did not return an improved answer.");
       setGeneratedQuestions((current) => current.map((item) =>
-        item.draftId === draft.draftId ? { ...item, ...improved } : item,
+        item.draftId === draft.draftId ? { ...item, ...improved, generation: result.generation } : item,
       ));
       setAnswerImprovementCounts((current) => ({
         ...current,
@@ -1236,6 +1243,7 @@ function AdminWorkspace() {
           difficulty: draft.difficulty,
           status: draft.status,
           tags: draft.tags,
+          aiGenerationRunId: draft.generation.generationRunId,
           parentQuestionId,
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
         }),
@@ -2076,7 +2084,7 @@ function AdminWorkspace() {
                             <input value={generated.question} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
                           </label>
                         ) : <strong>{generated.question}</strong>}
-                        <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"}</span>
+                        <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"} · AI-assisted by {generated.generation.provider} ({generated.generation.model})</span>
                         <QuestionStatusSelector
                           compact
                           value={generated.status}
@@ -2173,6 +2181,7 @@ function AdminWorkspace() {
                         <span className="eyebrow">AI merged response</span>
                         <strong>{mergedQuestion.question}</strong>
                         <p>{mergedQuestion.answer}</p>
+                        <span className="candidate-meta">AI-assisted by {mergedQuestion.generation.provider} ({mergedQuestion.generation.model})</span>
                         <div className="actions">
                           <button className="primary" type="button" onClick={() => editGeneratedQuestion(mergedQuestion)}>
                             Use in editor
