@@ -1035,7 +1035,7 @@ function AdminWorkspace() {
       const result = (await request(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      }, undefined, 200_000)) as GeneratedQuestionsResult;
       setGeneratedQuestions(createGeneratedDrafts(result.questions, result.generation));
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
