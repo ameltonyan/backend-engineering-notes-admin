@@ -99,6 +99,7 @@ export default function QuestionTree({
               <span>{questionKind(question.depth)} · Level {question.depth}</span>
               <span>Order {question.displayOrder + 1} of {selectedSiblingCount}</span>
               <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
+              {question.aiGenerationRunId && <span title={`Generation run ${question.aiGenerationRunId}`}>AI-assisted</span>}
             </div>
             <div className="question-disclosures">
               <button className="answer-disclosure" type="button" aria-expanded={Boolean(revealedAnswers[question.id])} onClick={() => onToggleAnswer(question.id)}>

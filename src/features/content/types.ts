@@ -24,6 +24,7 @@ export type Question = {
   difficulty: Difficulty;
   status: QuestionStatus;
   tags: string[];
+  aiGenerationRunId: string | null;
   displayOrder: number;
   depth: number;
 };
@@ -48,6 +49,7 @@ export type QuestionForm = {
   difficulty: Difficulty;
   status: QuestionStatus;
   tags: string[];
+  aiGenerationRunId: string | null;
   parentQuestionId: number | null;
   displayOrder: number;
 };

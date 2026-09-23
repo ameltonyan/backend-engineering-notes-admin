@@ -2,6 +2,14 @@ export type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 export type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
 export type AiGenerationMode = "main" | "batch-main" | "follow-up";
 
+export type AiGenerationMetadata = {
+  generationRunId: string;
+  provider: "MOCK" | "OPENAI" | "ZAI";
+  model: string;
+  operation: string;
+  generatedAt: string;
+};
+
 export type GeneratedQuestion = {
   question: string;
   answer: string;
@@ -15,6 +23,13 @@ export type GeneratedQuestion = {
 export type GeneratedQuestionDraft = GeneratedQuestion & {
   draftId: string;
   status: import("../content/types").QuestionStatus;
+  generation: AiGenerationMetadata;
+};
+
+export type GeneratedQuestionsResult = {
+  questions: GeneratedQuestion[];
+  usage?: AiUsage;
+  generation: AiGenerationMetadata;
 };
 
 export type AnswerImprovement = {
