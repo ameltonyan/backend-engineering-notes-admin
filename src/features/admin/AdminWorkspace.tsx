@@ -453,7 +453,7 @@ function AdminWorkspace() {
       difficulty: question.difficulty,
       status: question.status,
       tags: question.tags,
-      aiGenerationRunId: question.aiGenerationRunId,
+      aiGenerationRunId: question.aiGeneration?.generationRunId ?? null,
       parentQuestionId: question.parentQuestionId,
       displayOrder: question.displayOrder,
     });
