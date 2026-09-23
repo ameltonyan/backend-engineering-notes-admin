@@ -1,4 +1,4 @@
-import type { Difficulty } from "../questions/types";
+import type { AiGenerationMetadata, Difficulty } from "../questions/types";
 
 export type PageSummary = {
   slug: string;
@@ -24,7 +24,7 @@ export type Question = {
   difficulty: Difficulty;
   status: QuestionStatus;
   tags: string[];
-  aiGenerationRunId: string | null;
+  aiGeneration: AiGenerationMetadata | null;
   displayOrder: number;
   depth: number;
 };
