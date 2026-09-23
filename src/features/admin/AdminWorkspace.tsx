@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import AiLoadingOverlay from "../../components/AiLoadingOverlay";
 import DeleteConfirmationDialog, { type DeleteConfirmation } from "../../components/DeleteConfirmationDialog";
 import StatusBanner from "../../components/StatusBanner";
@@ -20,7 +20,13 @@ import { ApiRequestError, apiRequest as request } from "../../services/apiClient
 import "../../App.css";
 
 const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
+const difficultyStorageKey = "backend-engineering-notes-admin:difficulty";
 const maxBatchQuestionCount = 10;
+
+const readDifficulty = (): Difficulty => {
+  const stored = localStorage.getItem(difficultyStorageKey);
+  return stored === "BEGINNER" || stored === "INTERMEDIATE" || stored === "EXPERT" ? stored : "ADVANCED";
+};
 const defaultAnswerImprovement: AnswerImprovement = {
   criteria: "",
   humanized: false,
@@ -92,11 +98,13 @@ function AdminWorkspace() {
     displayOrder: 0,
   });
   const [isPageFormOpen, setIsPageFormOpen] = useState(true);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(readDifficulty);
   const [questionForm, setQuestionForm] = useState<QuestionForm>({
     question: "",
     answer: "",
     example: "",
     codeSnippet: "",
+    difficulty: selectedDifficulty,
     status: "DRAFT",
     tags: [],
     parentQuestionId: null,
@@ -124,7 +132,6 @@ function AdminWorkspace() {
   const [pageFieldError, setPageFieldError] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
   const [aiIdea, setAiIdea] = useState("");
-  const [aiDifficulty, setAiDifficulty] = useState<Difficulty>("ADVANCED");
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
   const [aiCount, setAiCount] = useState(3);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
@@ -170,6 +177,7 @@ function AdminWorkspace() {
   const isAiBusy = aiLoading || topicPlanLoading;
   const createGeneratedDrafts = (questions: GeneratedQuestion[]) => questions.map((question) => ({
     ...question,
+    difficulty: selectedDifficulty,
     draftId: `generated-${++generatedDraftSequence.current}`,
     status: editingQuestionId !== null && selectedQuestion ? selectedQuestion.status : "DRAFT" as QuestionStatus,
   }));
@@ -194,6 +202,10 @@ function AdminWorkspace() {
   useEffect(() => {
     localStorage.setItem(collapsedSectionsKey, JSON.stringify(collapsedSections));
   }, [collapsedSections]);
+
+  useEffect(() => {
+    localStorage.setItem(difficultyStorageKey, selectedDifficulty);
+  }, [selectedDifficulty]);
 
   useEffect(() => {
     if (!deleteConfirmation) return;
@@ -316,14 +328,14 @@ function AdminWorkspace() {
     return created;
   };
 
-  const loadPage = async (slug: string) => {
+  const loadPage = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
     setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
-    const loaded = await getPage(slug);
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+    const loaded = await getPage(slug, difficulty);
     setPage(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
     setPageForm({
@@ -334,7 +346,7 @@ function AdminWorkspace() {
       displayOrder: loaded.displayOrder,
     });
     setIsPageFormOpen(false);
-  };
+  }, [selectedDifficulty]);
 
   useEffect(() => {
     if (!credentials) return;
@@ -371,13 +383,13 @@ function AdminWorkspace() {
     if (!credentials || !selectedSlug) return;
     const loadSelectedPage = async () => {
       try {
-        await loadPage(selectedSlug);
+        await loadPage(selectedSlug, selectedDifficulty);
       } catch (err: unknown) {
         setError(getErrorMessage(err));
       }
     };
     void loadSelectedPage();
-  }, [credentials, selectedSlug]);
+  }, [credentials, selectedSlug, selectedDifficulty, loadPage]);
 
   const startQuestionCreation = (parentId: number | null) => {
     if (parentId !== null && !questionById.has(parentId)) {
@@ -407,6 +419,7 @@ function AdminWorkspace() {
       answer: "",
       example: "",
       codeSnippet: "",
+      difficulty: selectedDifficulty,
       status: "DRAFT",
       tags: [],
       parentQuestionId: parentId,
@@ -433,6 +446,7 @@ function AdminWorkspace() {
       answer: question.answer,
       example: question.example ?? "",
       codeSnippet: question.codeSnippet ?? "",
+      difficulty: question.difficulty,
       status: question.status,
       tags: question.tags,
       parentQuestionId: question.parentQuestionId,
@@ -465,7 +479,7 @@ function AdminWorkspace() {
     setEditingQuestionId(null);
     setDetailsGenerationTargetId(null);
     setDetailsGenerationReady(false);
-    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+    setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
   };
 
   const cancelQuestionForm = () => {
@@ -944,7 +958,7 @@ function AdminWorkspace() {
         }),
       })) as Question;
       const wasEditing = editingQuestionId !== null;
-      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
+      setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty: selectedDifficulty, status: "DRAFT", tags: [], parentQuestionId: null, displayOrder: 0 });
       setEditingQuestionId(null);
       setDetailsGenerationTargetId(null);
       setIsQuestionFormOpen(false);
@@ -991,7 +1005,7 @@ function AdminWorkspace() {
             shortened: questionImprovement.shortened,
             simplified: questionImprovement.simplified,
             answerOnly: false,
-            difficulty: aiDifficulty,
+            difficulty: selectedDifficulty,
             type: aiType,
           }
         : {
@@ -1001,7 +1015,7 @@ function AdminWorkspace() {
             pageTitle: page?.title,
             pageSection: page?.section,
             pageDescription: page?.description ?? "",
-            difficulty: aiDifficulty,
+            difficulty: selectedDifficulty,
             type: aiType,
             count: aiGenerationMode === "batch-main"
               ? aiCount
@@ -1048,6 +1062,7 @@ function AdminWorkspace() {
       answer: generated.answer,
       example: generated.example,
       codeSnippet: generated.codeSnippet,
+      difficulty: generated.difficulty,
       status: editingExistingQuestion ? selectedQuestion.status : "DRAFT",
       tags: generated.tags,
       parentQuestionId: editingExistingQuestion ? selectedQuestion.parentQuestionId : parentId,
@@ -1111,6 +1126,7 @@ function AdminWorkspace() {
             answer: question.answer.trim(),
             example: question.example.trim() || null,
             codeSnippet: question.codeSnippet.trim() || null,
+            difficulty: question.difficulty,
             status: question.status,
             tags: question.tags,
             parentQuestionId: null,
@@ -1216,6 +1232,7 @@ function AdminWorkspace() {
           answer: draft.answer.trim(),
           example: draft.example.trim() || null,
           codeSnippet: draft.codeSnippet.trim() || null,
+          difficulty: draft.difficulty,
           status: draft.status,
           tags: draft.tags,
           parentQuestionId,
@@ -1413,6 +1430,15 @@ function AdminWorkspace() {
           collapsedSections={collapsedSections}
           createMenuOpen={isCreateMenuOpen}
           loading={loading}
+          difficulty={selectedDifficulty}
+          onDifficultyChange={(difficulty) => {
+            setSelectedDifficulty(difficulty);
+            setGeneratedQuestions([]);
+            setMergedQuestion(null);
+            setSelectedGeneratedIndexes([]);
+            setIsAiPanelOpen(false);
+            setIsQuestionFormOpen(false);
+          }}
           onSearchChange={setPageSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
           onNewPage={openNewPage}
@@ -1838,6 +1864,24 @@ function AdminWorkspace() {
                       onChange={(event) => setQuestionForm({ ...questionForm, tags: parseTags(event.target.value) })}
                     />
                   </label>
+                  <label className="normal-question-field">
+                    Difficulty
+                    <select
+                      value={questionForm.difficulty}
+                      disabled={questionForm.parentQuestionId !== null}
+                      onChange={(event) => setQuestionForm({ ...questionForm, difficulty: event.target.value as Difficulty })}
+                    >
+                      <option value="BEGINNER">Beginner</option>
+                      <option value="INTERMEDIATE">Intermediate</option>
+                      <option value="ADVANCED">Advanced</option>
+                      <option value="EXPERT">Expert</option>
+                    </select>
+                    <small className="field-hint">
+                      {questionForm.parentQuestionId !== null
+                        ? "Follow-ups inherit their parent question's difficulty."
+                        : "Changing this moves the question and its follow-ups to that level."}
+                    </small>
+                  </label>
                   <div className="normal-question-field"><QuestionStatusSelector
                     value={questionForm.status}
                     onChange={(status) => setQuestionForm({ ...questionForm, status })}
@@ -1937,17 +1981,18 @@ function AdminWorkspace() {
                     </div>
                   )}
                   <div className="ai-fields">
-                    <label>
-                      Difficulty
-                      <select value={aiDifficulty} onChange={(event) => setAiDifficulty(event.target.value as Difficulty)}>
+                    <label className="ai-field">
+                      <span className="ai-field-label">Difficulty</span>
+                      <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from content difficulty">
                         <option value="BEGINNER">Beginner</option>
                         <option value="INTERMEDIATE">Intermediate</option>
                         <option value="ADVANCED">Advanced</option>
                         <option value="EXPERT">Expert</option>
                       </select>
+                      <small className="field-hint">Inherited from the selected content difficulty.</small>
                     </label>
-                    <label>
-                      Type
+                    <label className="ai-field">
+                      <span className="ai-field-label">Type</span>
                       <select value={aiType} onChange={(event) => setAiType(event.target.value as QuestionType)}>
                         <option value="CONCEPTUAL">Conceptual</option>
                         <option value="CODE">Code</option>
@@ -1959,8 +2004,8 @@ function AdminWorkspace() {
                       </select>
                     </label>
                     {aiGenerationMode === "batch-main" && (
-                      <label>
-                        Number of questions
+                      <label className="ai-field">
+                        <span className="ai-field-label">Number of questions</span>
                         <input
                           type="number"
                           min={1}
@@ -1971,7 +2016,8 @@ function AdminWorkspace() {
                       </label>
                     )}
                     {aiGenerationMode !== "batch-main" && (
-                      <div className="ai-alternatives-field">
+                      <div className="ai-field ai-alternatives-field">
+                        <span className="ai-field-label">Options</span>
                         <label className="checkbox-label">
                           <input
                             type="checkbox"
