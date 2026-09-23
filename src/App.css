@@ -525,6 +525,30 @@ select:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.provider-selector {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  color: var(--muted);
+  font: 11px 'DM Mono', monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.provider-selector select {
+  padding: 9px 34px 9px 10px;
+  color: var(--ink);
+  font: 14px 'Space Grotesk', sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);

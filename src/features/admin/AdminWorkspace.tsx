@@ -14,6 +14,7 @@ import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
 import type { AiGenerationMode, AiUsage, AnswerImprovement, Difficulty, GeneratedQuestion, GeneratedQuestionDraft, QuestionType } from "../questions/types";
 import StudyProgramEditor from "../study-programs/StudyProgramEditor";
+import AiProviderSelector from "../settings/AiProviderSelector";
 import { listStudyPrograms, saveStudyProgram as persistStudyProgram } from "../study-programs/studyProgramsApi";
 import type { StudyProgramPayload, WeeklyStudyProgram } from "../study-programs/types";
 import { ApiRequestError, apiRequest as request } from "../../services/apiClient";
@@ -1409,15 +1410,21 @@ function AdminWorkspace() {
           <p className="eyebrow">Backend Engineering Notes</p>
           <h1>Content control room</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            clearCredentials();
-            setCredentials("");
-          }}
-        >
-          Sign out
-        </button>
+        <div className="topbar-actions">
+          <AiProviderSelector
+            onError={setError}
+            onChanged={setNotice}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              clearCredentials();
+              setCredentials("");
+            }}
+          >
+            Sign out
+          </button>
+        </div>
       </header>
       {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} topicPlanLoading={topicPlanLoading} />}
       <div className="workspace">
