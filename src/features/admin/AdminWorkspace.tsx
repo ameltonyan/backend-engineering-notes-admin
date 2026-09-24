@@ -7,7 +7,7 @@ import { clearCredentials, readCredentials, saveCredentials } from "../auth/auth
 import ContentLibrary from "../content/ContentLibrary";
 import { getPage, listPages, listSections } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
-import type { GeneratedTopicSection, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
+import type { GeneratedPageProposal, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
 import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
@@ -154,21 +154,21 @@ function AdminWorkspace() {
   const [detailsGenerationReady, setDetailsGenerationReady] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
-  const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
+  const [isPagePlanOpen, setIsPagePlanOpen] = useState(false);
   const [isStudyProgramOpen, setIsStudyProgramOpen] = useState(false);
   const [studyPrograms, setStudyPrograms] = useState<WeeklyStudyProgram[]>([]);
-  const [topicPlanSection, setTopicPlanSection] = useState<Section | null>(null);
-  const [topicPlanTopic, setTopicPlanTopic] = useState("");
-  const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
-  const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
-  const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
+  const [pagePlanSection, setPagePlanSection] = useState<Section | null>(null);
+  const [pagePlanSectionName, setPagePlanSectionName] = useState("");
+  const [pagePlanGuidance, setPagePlanGuidance] = useState("");
+  const [pagePlanTargetRole, setPagePlanTargetRole] = useState("Senior Backend Engineer");
+  const [pagePlanFocuses, setPagePlanFocuses] = useState<string[]>([
     "Core knowledge",
     "Internals",
   ]);
-  const [topicPlanCount, setTopicPlanCount] = useState(10);
-  const [generatedTopicSections, setGeneratedTopicSections] = useState<GeneratedTopicSection[]>([]);
-  const [selectedTopicSectionIndexes, setSelectedTopicSectionIndexes] = useState<number[]>([]);
-  const [topicPlanLoading, setTopicPlanLoading] = useState(false);
+  const [pagePlanPageCount, setPagePlanPageCount] = useState(10);
+  const [generatedPageProposals, setGeneratedPageProposals] = useState<GeneratedPageProposal[]>([]);
+  const [selectedPageProposalIndexes, setSelectedPageProposalIndexes] = useState<number[]>([]);
+  const [pagePlanLoading, setPagePlanLoading] = useState(false);
   const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
@@ -176,7 +176,7 @@ function AdminWorkspace() {
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
-  const isAiBusy = aiLoading || topicPlanLoading;
+  const isAiBusy = aiLoading || pagePlanLoading;
   const createGeneratedDrafts = (questions: GeneratedQuestion[], generation: AiGenerationMetadata) => questions.map((question) => ({
     ...question,
     difficulty: selectedDifficulty,
@@ -306,7 +306,7 @@ function AdminWorkspace() {
   };
 
   const openStudyProgram = () => {
-    setIsCreateMenuOpen(false); setIsTopicPlanOpen(false); setIsStudyProgramOpen(true); setPage(null);
+    setIsCreateMenuOpen(false); setIsPagePlanOpen(false); setIsStudyProgramOpen(true); setPage(null);
   };
 
   const saveStudyProgram = async (programId: number | null, payload: StudyProgramPayload) => {
@@ -335,7 +335,7 @@ function AdminWorkspace() {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
     setIsAiPanelOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setSelectedQuestionId(null);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
     const loaded = await getPage(slug, difficulty);
@@ -408,7 +408,7 @@ function AdminWorkspace() {
     setError("");
     setNotice("");
     setIsAiPanelOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
@@ -444,7 +444,7 @@ function AdminWorkspace() {
     setDetailsGenerationReady(false);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setQuestionForm({
       question: question.question,
       answer: question.answer,
@@ -507,7 +507,7 @@ function AdminWorkspace() {
     setQuestionImprovement(defaultAnswerImprovement);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setEditingQuestionId(null);
     window.requestAnimationFrame(() => {
       scrollToSection("ai-assist");
@@ -515,34 +515,34 @@ function AdminWorkspace() {
     });
   };
 
-  const openTopicPlan = (section: Section) => {
+  const openPagePlan = (section: Section) => {
     setIsAiPanelOpen(false);
     setIsQuestionFormOpen(false);
-    setIsTopicPlanOpen(true);
-    setTopicPlanSection(section);
-    setTopicPlanTopic(section.name);
-    setTopicPlanFocuses(["Core knowledge", "Internals"]);
-    setGeneratedTopicSections([]);
-    setSelectedTopicSectionIndexes([]);
+    setIsPagePlanOpen(true);
+    setPagePlanSection(section);
+    setPagePlanSectionName(section.name);
+    setPagePlanFocuses(["Core knowledge", "Internals"]);
+    setGeneratedPageProposals([]);
+    setSelectedPageProposalIndexes([]);
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => {
-      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("page-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  const closeTopicPlan = () => {
-    if (topicPlanLoading || loading) return;
-    setIsTopicPlanOpen(false);
-    setTopicPlanSection(null);
-    setTopicPlanTopic("");
-    setTopicPlanGuidance("");
-    setGeneratedTopicSections([]);
-    setSelectedTopicSectionIndexes([]);
+  const closePagePlan = () => {
+    if (pagePlanLoading || loading) return;
+    setIsPagePlanOpen(false);
+    setPagePlanSection(null);
+    setPagePlanSectionName("");
+    setPagePlanGuidance("");
+    setGeneratedPageProposals([]);
+    setSelectedPageProposalIndexes([]);
   };
 
   const openNewPage = () => {
-    closeTopicPlan();
+    closePagePlan();
     setIsCreateMenuOpen(false);
     setPage(null);
     setSelectedSlug("");
@@ -557,105 +557,105 @@ function AdminWorkspace() {
     setIsPageFormOpen(true);
   };
 
-  const openNewTopicPlan = () => {
+  const openNewPagePlan = () => {
     setIsAiPanelOpen(false);
     setIsQuestionFormOpen(false);
-    setIsTopicPlanOpen(true);
-    setTopicPlanSection(null);
+    setIsPagePlanOpen(true);
+    setPagePlanSection(null);
     setPage(null);
-    setTopicPlanTopic("");
-    setTopicPlanFocuses(["Core knowledge", "Internals"]);
-    setGeneratedTopicSections([]);
-    setSelectedTopicSectionIndexes([]);
+    setPagePlanSectionName("");
+    setPagePlanFocuses(["Core knowledge", "Internals"]);
+    setGeneratedPageProposals([]);
+    setSelectedPageProposalIndexes([]);
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => {
-      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("topic-plan-topic")?.focus();
+      document.getElementById("page-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("page-plan-section-name")?.focus();
     });
   };
 
-  const generateTopicPlan = async (event: FormEvent) => {
+  const generatePagePlan = async (event: FormEvent) => {
     event.preventDefault();
-    const topic = topicPlanTopic.trim();
-    const existingPageSection = topicPlanSection?.name ?? topic;
-    if (!topic) {
-      setError("Enter a topic for the plan.");
+    const sectionName = pagePlanSectionName.trim();
+    const targetSectionName = pagePlanSection?.name ?? sectionName;
+    if (!sectionName) {
+      setError("Enter a section name for the page plan.");
       return;
     }
-    if (!topicPlanFocuses.length) {
+    if (!pagePlanFocuses.length) {
       setError("Select at least one interview focus.");
       return;
     }
     setError("");
     setAiLoadingMessage(aiLoadingMessages[0]);
-    setTopicPlanLoading(true);
+    setPagePlanLoading(true);
     try {
-      const result = (await request("/api/admin/ai/topic-plans/generate", {
+      const result = (await request("/api/admin/ai/page-plans/generate", {
         method: "POST",
         body: JSON.stringify({
-          topic,
-          targetRole: topicPlanTargetRole.trim(),
-          focuses: topicPlanFocuses,
-          sectionCount: topicPlanCount,
-          additionalGuidance: topicPlanGuidance.trim() || null,
+          sectionName,
+          targetRole: pagePlanTargetRole.trim(),
+          focuses: pagePlanFocuses,
+          pageCount: pagePlanPageCount,
+          additionalGuidance: pagePlanGuidance.trim() || null,
           existingPageTitles: pages
-            .filter((item) => item.section.toLowerCase() === existingPageSection.toLowerCase())
+            .filter((item) => item.section.toLowerCase() === targetSectionName.toLowerCase())
             .map((item) => item.title)
             .slice(0, 50),
         }),
-      }, undefined, 180_000)) as { sections: GeneratedTopicSection[]; usage?: AiUsage };
-      setGeneratedTopicSections(result.sections);
-      setSelectedTopicSectionIndexes(result.sections.map((_, index) => index));
+      }, undefined, 180_000)) as { pages: GeneratedPageProposal[]; usage?: AiUsage };
+      setGeneratedPageProposals(result.pages);
+      setSelectedPageProposalIndexes(result.pages.map((_, index) => index));
       setAiUsage(result.usage ?? null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setTopicPlanLoading(false);
+      setPagePlanLoading(false);
     }
   };
 
-  const moveTopicPlanCandidate = (index: number, direction: -1 | 1) => {
+  const movePageProposal = (index: number, direction: -1 | 1) => {
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= generatedTopicSections.length) return;
-    setGeneratedTopicSections((current) => {
+    if (targetIndex < 0 || targetIndex >= generatedPageProposals.length) return;
+    setGeneratedPageProposals((current) => {
       const reordered = [...current];
-      const [candidate] = reordered.splice(index, 1);
-      reordered.splice(targetIndex, 0, candidate);
+      const [proposal] = reordered.splice(index, 1);
+      reordered.splice(targetIndex, 0, proposal);
       return reordered;
     });
-    setSelectedTopicSectionIndexes((current) => current.map((selectedIndex) => {
+    setSelectedPageProposalIndexes((current) => current.map((selectedIndex) => {
       if (selectedIndex === index) return targetIndex;
       if (selectedIndex === targetIndex) return index;
       return selectedIndex;
     }));
   };
 
-  const removeTopicPlanCandidate = (index: number) => {
-    setGeneratedTopicSections((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
-    setSelectedTopicSectionIndexes((current) => current
+  const removePageProposal = (index: number) => {
+    setGeneratedPageProposals((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
+    setSelectedPageProposalIndexes((current) => current
       .filter((selectedIndex) => selectedIndex !== index)
       .map((selectedIndex) => selectedIndex > index ? selectedIndex - 1 : selectedIndex));
   };
 
-  const saveTopicPlan = async () => {
-    if (!topicPlanTopic.trim() || !selectedTopicSectionIndexes.length) return;
-    const selectedCandidates = selectedTopicSectionIndexes.map((index) => generatedTopicSections[index]);
+  const savePagePlan = async () => {
+    if (!pagePlanSectionName.trim() || !selectedPageProposalIndexes.length) return;
+    const selectedProposals = selectedPageProposalIndexes.map((index) => generatedPageProposals[index]);
     const existingSlugs = new Set(pages.map((item) => item.slug));
     setLoading(true);
     setError("");
     try {
-      let section = topicPlanSection ?? await getOrCreateSection(topicPlanTopic);
-      if (topicPlanSection && section.name.trim().toLowerCase() !== topicPlanTopic.trim().toLowerCase()) {
+      let section = pagePlanSection ?? await getOrCreateSection(pagePlanSectionName);
+      if (pagePlanSection && section.name.trim().toLowerCase() !== pagePlanSectionName.trim().toLowerCase()) {
         section = (await request(`/api/admin/sections/${section.id}`, {
           method: "PUT",
-          body: JSON.stringify({ name: topicPlanTopic.trim() }),
+          body: JSON.stringify({ name: pagePlanSectionName.trim() }),
         })) as Section;
         setSections((current) => current.map((item) => item.id === section.id ? section : item));
       }
       const sectionPageCount = pages.filter((item) => item.section === section.name).length;
-      for (const [index, candidate] of selectedCandidates.entries()) {
-        const baseSlug = generateSlug(section.name, candidate.title);
+      for (const [index, proposal] of selectedProposals.entries()) {
+        const baseSlug = generateSlug(section.name, proposal.title);
         let slug = baseSlug;
         let suffix = 2;
         while (existingSlugs.has(slug)) {
@@ -667,21 +667,21 @@ function AdminWorkspace() {
           method: "POST",
           body: JSON.stringify({
             slug,
-            title: candidate.title.trim(),
-            description: candidate.description.trim() || null,
+            title: proposal.title.trim(),
+            description: proposal.description.trim() || null,
             sectionId: section.id,
             displayOrder: sectionPageCount + index,
           }),
         });
       }
       await loadPages();
-      setNotice(`${selectedCandidates.length} plan section${selectedCandidates.length === 1 ? "" : "s"} created`);
-      setIsTopicPlanOpen(false);
-      setTopicPlanSection(null);
-      setTopicPlanTopic("");
-      setTopicPlanGuidance("");
-      setGeneratedTopicSections([]);
-      setSelectedTopicSectionIndexes([]);
+      setNotice(`${selectedProposals.length} page${selectedProposals.length === 1 ? "" : "s"} created`);
+      setIsPagePlanOpen(false);
+      setPagePlanSection(null);
+      setPagePlanSectionName("");
+      setPagePlanGuidance("");
+      setGeneratedPageProposals([]);
+      setSelectedPageProposalIndexes([]);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -700,7 +700,7 @@ function AdminWorkspace() {
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
     setIsQuestionFormOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setIsAiPanelOpen(true);
     window.requestAnimationFrame(() => {
       scrollToSection("ai-assist");
@@ -780,12 +780,12 @@ function AdminWorkspace() {
                 setSelectedQuestionId(null);
                 closeQuestionForm();
                 setIsAiPanelOpen(false);
-                closeTopicPlan();
+                closePagePlan();
                 return;
               }
               closeQuestionForm();
               setIsAiPanelOpen(false);
-              closeTopicPlan();
+              closePagePlan();
               setSelectedQuestionId(question.id);
               setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
               if (children.length) {
@@ -1035,7 +1035,7 @@ function AdminWorkspace() {
       const result = (await request(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      }, undefined, 200_000)) as GeneratedQuestionsResult;
       setGeneratedQuestions(createGeneratedDrafts(result.questions, result.generation));
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
@@ -1078,7 +1078,7 @@ function AdminWorkspace() {
     setEditingQuestionId(editingExistingQuestion ? selectedQuestion.id : null);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
-    setIsTopicPlanOpen(false);
+    setIsPagePlanOpen(false);
     setSelectedGeneratedIndexes([]);
     setQuestionFieldError("");
     window.requestAnimationFrame(() => {
@@ -1434,7 +1434,7 @@ function AdminWorkspace() {
           </button>
         </div>
       </header>
-      {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} topicPlanLoading={topicPlanLoading} />}
+      {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} pagePlanLoading={pagePlanLoading} />}
       <div className="workspace">
         <ContentLibrary
           pages={pages}
@@ -1457,18 +1457,18 @@ function AdminWorkspace() {
           onSearchChange={setPageSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
           onNewPage={openNewPage}
-          onNewTopicPlan={() => { setIsCreateMenuOpen(false); openNewTopicPlan(); }}
+          onNewPagePlan={() => { setIsCreateMenuOpen(false); openNewPagePlan(); }}
           onOpenStudyProgram={openStudyProgram}
-          onToggleSection={(section) => { setIsCreateMenuOpen(false); closeTopicPlan(); setCollapsedSections((current) => ({ ...current, [section]: !current[section] })); }}
-          onSelectPage={(slug) => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(slug); }}
+          onToggleSection={(section) => { setIsCreateMenuOpen(false); closePagePlan(); setCollapsedSections((current) => ({ ...current, [section]: !current[section] })); }}
+          onSelectPage={(slug) => { setIsCreateMenuOpen(false); closePagePlan(); setSelectedSlug(slug); }}
           onMoveSection={moveSection}
           onMovePage={movePage}
-          onOpenTopicPlan={openTopicPlan}
+          onOpenPagePlan={openPagePlan}
         />
         <section className="editor" id="content-library">
           <StatusBanner error={error} notice={notice} onDismiss={() => { setError(""); setNotice(""); }} />
           {isStudyProgramOpen && <StudyProgramEditor pages={pages} programs={studyPrograms} loading={loading} onSave={saveStudyProgram} onClose={() => setIsStudyProgramOpen(false)} />}
-          {!isStudyProgramOpen && !isTopicPlanOpen && <>
+          {!isStudyProgramOpen && !isPagePlanOpen && <>
             <div className="editor-heading">
               <div>
                 <p className="eyebrow">{page ? "Editing page" : "New page"}</p>
@@ -1601,39 +1601,39 @@ function AdminWorkspace() {
             </form>}
             {page && <div className="page-form-separator" aria-hidden="true" />}
           </>}
-          {isTopicPlanOpen && (
-            <section className="topic-plan" id="topic-plan" aria-label={`Create pages with AI for ${topicPlanTopic || "a new topic"}`}>
+          {isPagePlanOpen && (
+            <section className="plan-editor" id="page-plan" aria-label={`Create pages with AI for ${pagePlanSectionName || "a new section"}`}>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">AI assist</p>
-                  <h3>New page with AI</h3>
-                  <span>{topicPlanSection ? `${topicPlanSection.name} · ` : "Start with a new topic · "}proposals remain unpublished until you create the selected pages</span>
+                  <h3>Generate pages with AI</h3>
+                  <span>{pagePlanSection ? `${pagePlanSection.name} · ` : "Start with a new section · "}proposals remain unpublished until you create the selected pages</span>
                 </div>
               </div>
-              <form className="topic-plan-form" onSubmit={generateTopicPlan}>
+              <form className="plan-form" onSubmit={generatePagePlan}>
                 <label>
-                  Topic
-                  <input id="topic-plan-topic" value={topicPlanTopic} onChange={(event) => setTopicPlanTopic(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
-                  <small className="field-hint">Enter the subject only; choose the learner level in the audience field.</small>
+                  Section name
+                  <input id="page-plan-section-name" value={pagePlanSectionName} onChange={(event) => setPagePlanSectionName(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
+                  <small className="field-hint">Choose the section that will contain the generated pages; set the learner level below.</small>
                 </label>
                 <label>
                   Audience / target role
-                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Beginner backend engineer" required />
+                  <input value={pagePlanTargetRole} onChange={(event) => setPagePlanTargetRole(event.target.value)} placeholder="e.g. Beginner backend engineer" required />
                   <small className="field-hint">Controls the depth and expectations of the generated pages.</small>
                 </label>
                 <label>
                   Additional guidance (optional)
                   <textarea
                     rows={3}
-                    value={topicPlanGuidance}
-                    onChange={(event) => setTopicPlanGuidance(event.target.value)}
+                    value={pagePlanGuidance}
+                    onChange={(event) => setPagePlanGuidance(event.target.value)}
                     placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
                   />
                 </label>
-                {topicPlanTopic.trim() && pages.some((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topicPlanTopic.trim()).toLowerCase()) && (
-                  <div className="topic-plan-existing">
+                {pagePlanSectionName.trim() && pages.some((item) => item.section.toLowerCase() === (pagePlanSection?.name ?? pagePlanSectionName.trim()).toLowerCase()) && (
+                  <div className="page-plan-existing">
                     <span className="field-label">Existing pages excluded from suggestions</span>
-                    <p>{pages.filter((item) => item.section.toLowerCase() === (topicPlanSection?.name ?? topicPlanTopic.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
+                    <p>{pages.filter((item) => item.section.toLowerCase() === (pagePlanSection?.name ?? pagePlanSectionName.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
                   </div>
                 )}
                 <fieldset className="focus-options">
@@ -1642,63 +1642,63 @@ function AdminWorkspace() {
                     <label key={focus}>
                       <input
                         type="checkbox"
-                        checked={topicPlanFocuses.includes(focus)}
-                        onChange={() => setTopicPlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
+                        checked={pagePlanFocuses.includes(focus)}
+                        onChange={() => setPagePlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
                       />
                       {focus}
                     </label>
                   ))}
                 </fieldset>
                 <label>
-                  Number of sections
+                  Number of pages
                   <input
                     type="number"
                     min={1}
                     max={15}
                     step={1}
-                    value={topicPlanCount}
-                    onChange={(event) => setTopicPlanCount(Number(event.target.value))}
+                    value={pagePlanPageCount}
+                    onChange={(event) => setPagePlanPageCount(Number(event.target.value))}
                     required
                   />
-                  <small className="field-hint">Choose between 1 and 15 sections.</small>
+                  <small className="field-hint">Choose between 1 and 15 pages.</small>
                 </label>
                 <div className="actions question-form-actions">
-                    <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
+                    <button className="primary" type="submit" disabled={isAiBusy}>{pagePlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
                 </div>
               </form>
-              {generatedTopicSections.length > 0 && (
-                <div className="topic-plan-candidates">
+              {generatedPageProposals.length > 0 && (
+                <div className="plan-proposals">
                   <div className="generated-heading">
                     <h4>Suggested pages</h4>
                     {aiUsage?.totalTokens !== undefined && <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>}
                   </div>
-                  <p className="field-hint">Edit, select, and order these proposals before creating normal pages for this topic.</p>
-                  {generatedTopicSections.map((candidate, index) => (
-                    <article className="topic-plan-candidate" key={`${candidate.title}-${index}`}>
-                      <div className="topic-plan-candidate-heading">
+                  <p className="field-hint">Edit, select, and order these proposals before creating them in this section.</p>
+                  {generatedPageProposals.map((proposal, index) => (
+                    <article className="plan-proposal" key={`${proposal.title}-${index}`}>
+                      <div className="plan-proposal-heading">
                         <label className="generated-select">
-                          <input type="checkbox" checked={selectedTopicSectionIndexes.includes(index)} onChange={() => setSelectedTopicSectionIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
+                          <input type="checkbox" checked={selectedPageProposalIndexes.includes(index)} onChange={() => setSelectedPageProposalIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
                           <span className="eyebrow">Page {index + 1}</span>
                         </label>
-                        <div className="plan-candidate-actions" aria-label={`Manage suggested section ${index + 1}`}>
-                          <button type="button" aria-label="Move page up" title="Move up" disabled={index === 0} onClick={() => moveTopicPlanCandidate(index, -1)}>↑</button>
-                          <button type="button" aria-label="Move page down" title="Move down" disabled={index === generatedTopicSections.length - 1} onClick={() => moveTopicPlanCandidate(index, 1)}>↓</button>
-                          <button type="button" title="Remove page suggestion" onClick={() => removeTopicPlanCandidate(index)}>Remove</button>
+                        <div className="plan-proposal-actions" aria-label={`Manage suggested page ${index + 1}`}>
+                          <button type="button" aria-label="Move page up" title="Move up" disabled={index === 0} onClick={() => movePageProposal(index, -1)}>↑</button>
+                          <button type="button" aria-label="Move page down" title="Move down" disabled={index === generatedPageProposals.length - 1} onClick={() => movePageProposal(index, 1)}>↓</button>
+                          <button type="button" title="Remove page suggestion" onClick={() => removePageProposal(index)}>Remove</button>
                         </div>
                       </div>
-                      <label>Title<input value={candidate.title} onChange={(event) => setGeneratedTopicSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
-                      <label>Description<textarea rows={2} value={candidate.description} onChange={(event) => setGeneratedTopicSections((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
+                      <label>Title<input value={proposal.title} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
+                      <label>Description<textarea rows={2} value={proposal.description} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
                     </article>
                   ))}
                   <div className="actions question-form-actions">
-                    <button className="primary" type="button" disabled={!selectedTopicSectionIndexes.length || loading} onClick={saveTopicPlan}>Create selected pages</button>
-                    <button type="button" disabled={loading} onClick={() => { setGeneratedTopicSections([]); setSelectedTopicSectionIndexes([]); }}>Discard suggestions</button>
+                    <button className="primary" type="button" disabled={!selectedPageProposalIndexes.length || loading} onClick={savePagePlan}>Create selected pages</button>
+                    <button type="button" disabled={loading} onClick={() => { setGeneratedPageProposals([]); setSelectedPageProposalIndexes([]); }}>Discard suggestions</button>
                   </div>
                 </div>
               )}
             </section>
           )}
-          {page && !isTopicPlanOpen && (
+          {page && !isPagePlanOpen && (
             <>
               <div className="interview-heading">
                 <div>
@@ -1767,7 +1767,7 @@ function AdminWorkspace() {
                   onSelect={(question, hasChildren) => {
                     closeQuestionForm();
                     setIsAiPanelOpen(false);
-                    closeTopicPlan();
+                    closePagePlan();
                     setSelectedQuestionId(question.id);
                     setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
                     if (hasChildren) setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
@@ -1776,7 +1776,7 @@ function AdminWorkspace() {
                     setSelectedQuestionId(null);
                     closeQuestionForm();
                     setIsAiPanelOpen(false);
-                    closeTopicPlan();
+                    closePagePlan();
                   }}
                   onToggleAnswer={(id) => setRevealedAnswers((current) => ({ ...current, [id]: !current[id] }))}
                   onToggleExample={(id) => setRevealedExamples((current) => ({ ...current, [id]: !current[id] }))}

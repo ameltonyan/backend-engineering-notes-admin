@@ -54,7 +54,7 @@ export type QuestionForm = {
   displayOrder: number;
 };
 
-export type GeneratedTopicSection = {
+export type GeneratedPageProposal = {
   title: string;
   description: string;
 };
