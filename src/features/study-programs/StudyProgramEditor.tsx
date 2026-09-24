@@ -55,7 +55,7 @@ function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props
   };
 
   return (
-    <section className="topic-plan" aria-label="Weekly study program editor">
+    <section className="plan-editor" aria-label="Weekly study program editor">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Weekly study program</p>
@@ -63,12 +63,12 @@ function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props
           <span>Each day links to existing course pages. Learners track completion and weak points in their browser.</span>
         </div>
       </div>
-      <form className="topic-plan-form" onSubmit={(event) => void submit(event)}>
+      <form className="plan-form" onSubmit={(event) => void submit(event)}>
         <label>Name<input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required /></label>
         <label>Description<textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} /></label>
         {days.map((day, dayIndex) => (
-          <article className="topic-plan-candidate" key={day.dayOfWeek}>
-            <div className="topic-plan-candidate-heading">
+          <article className="plan-proposal" key={day.dayOfWeek}>
+            <div className="plan-proposal-heading">
               <strong>{weekDays[day.dayOfWeek]}</strong>
               <label className="generated-edit-field">Minutes<input type="number" min={15} max={240} value={day.minutes} onChange={(event) => updateDay(dayIndex, { minutes: Number(event.target.value) })} /></label>
             </div>
@@ -79,7 +79,7 @@ function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props
         ))}
         <div className="actions question-form-actions"><button className="primary" type="submit" disabled={loading}>Publish weekly program</button><button type="button" disabled={loading} onClick={onClose}>Cancel</button></div>
       </form>
-      {programs.length > 0 && <div className="topic-plan-candidates"><h4>Published programs</h4>{programs.map((program) => <div className="actions" key={program.id}><span>{program.name}</span><button type="button" disabled={loading} onClick={() => selectProgram(program)}>Edit</button></div>)}</div>}
+      {programs.length > 0 && <div className="plan-proposals"><h4>Published programs</h4>{programs.map((program) => <div className="actions" key={program.id}><span>{program.name}</span><button type="button" disabled={loading} onClick={() => selectProgram(program)}>Edit</button></div>)}</div>}
     </section>
   );
 }

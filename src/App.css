@@ -629,14 +629,14 @@ select:disabled {
   font-size: 18px;
 }
 
-.topic-list-title {
+.content-list-title {
   display: flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
 }
 
-.topic-list-title h2 {
+.content-list-title h2 {
   white-space: nowrap;
 }
 
@@ -823,7 +823,7 @@ select:disabled {
   color: var(--green-dark);
 }
 
-.topic-plan {
+.plan-editor {
   margin: 0 0 42px;
   padding: 22px;
   border: 1px solid #b9d5c4;
@@ -831,22 +831,22 @@ select:disabled {
   box-shadow: 7px 7px 0 rgba(7, 88, 67, .1);
 }
 
-.topic-plan .section-heading {
+.plan-editor .section-heading {
   align-items: flex-start;
   border-bottom: 0;
 }
 
-.topic-plan .section-heading > div {
+.plan-editor .section-heading > div {
   min-width: 0;
   flex: 1;
 }
 
-.topic-plan .section-heading h3,
-.topic-plan .section-heading span {
+.plan-editor .section-heading h3,
+.plan-editor .section-heading span {
   overflow-wrap: anywhere;
 }
 
-.topic-plan .section-heading span {
+.plan-editor .section-heading span {
   display: block;
   margin-top: 6px;
   color: var(--muted);
@@ -854,8 +854,8 @@ select:disabled {
   line-height: 1.45;
 }
 
-.topic-plan-form,
-.topic-plan-candidates {
+.plan-form,
+.plan-proposals {
   display: grid;
   gap: 16px;
   margin-top: 18px;
@@ -888,7 +888,7 @@ select:disabled {
   width: auto;
 }
 
-.topic-plan-candidate {
+.plan-proposal {
   display: grid;
   gap: 10px;
   padding: 16px;
@@ -896,23 +896,23 @@ select:disabled {
   background: var(--panel);
 }
 
-.topic-plan-candidate textarea {
+.plan-proposal textarea {
   min-height: 96px;
 }
 
-.topic-plan-candidate-heading {
+.plan-proposal-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.plan-candidate-actions {
+.plan-proposal-actions {
   display: flex;
   gap: 4px;
 }
 
-.plan-candidate-actions button {
+.plan-proposal-actions button {
   padding: 5px 8px;
   font-size: 12px;
 }
@@ -1156,7 +1156,7 @@ select:disabled {
 
 .question-form-heading button,
 .ai-assist > .section-heading > button,
-.topic-plan > .section-heading > button {
+.plan-editor > .section-heading > button {
   flex-shrink: 0;
   padding: 6px 9px;
   font-size: 12px;
