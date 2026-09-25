@@ -333,17 +333,26 @@ function AdminWorkspace() {
   };
 
   const getOrCreateCategory = async (name: string) => {
-    const existing = categories.find(
-      (category) => category.name.toLowerCase() === name.trim().toLowerCase(),
-    );
+    const normalizedName = name.trim().toLowerCase();
+    const existing = categories.find((category) => category.name.toLowerCase() === normalizedName);
     if (existing) return existing;
 
-    const created = (await request("/api/admin/categories", {
-      method: "POST",
-      body: JSON.stringify({ name: name.trim(), displayOrder: categories.length }),
-    })) as Category;
-    setCategories((current) => [...current, created]);
-    return created;
+    try {
+      const created = (await request("/api/admin/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim(), displayOrder: categories.length }),
+      })) as Category;
+      setCategories((current) => [...current, created]);
+      return created;
+    } catch (err) {
+      if (!(err instanceof ApiRequestError) || err.status !== 409) throw err;
+      const refreshedCategories = await loadCategories();
+      const concurrentCategory = refreshedCategories.find(
+        (category) => category.name.toLowerCase() === normalizedName,
+      );
+      if (concurrentCategory) return concurrentCategory;
+      throw err;
+    }
   };
 
   const loadTopic = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
@@ -579,6 +588,7 @@ function AdminWorkspace() {
     setTopicPlanCategory(null);
     setTopic(null);
     setTopicPlanCategoryName("");
+    setTopicPlanGuidance("");
     setTopicPlanFocuses(["Core knowledge", "Internals"]);
     setGeneratedTopicProposals([]);
     setSelectedTopicProposalIndexes([]);
@@ -661,15 +671,8 @@ function AdminWorkspace() {
     setLoading(true);
     setError("");
     try {
-      let category = topicPlanCategory ?? await getOrCreateCategory(topicPlanCategoryName);
-      if (topicPlanCategory && category.name.trim().toLowerCase() !== topicPlanCategoryName.trim().toLowerCase()) {
-        category = (await request(`/api/admin/categories/${category.id}`, {
-          method: "PUT",
-          body: JSON.stringify({ name: topicPlanCategoryName.trim() }),
-        })) as Category;
-        setCategories((current) => current.map((item) => item.id === category.id ? category : item));
-      }
-      const categoryTopicCount = topics.filter((item) => item.category === category.name).length;
+      const category = await getOrCreateCategory(topicPlanCategoryName);
+      const categoryTopicCount = topics.filter((item) => item.categoryId === category.id).length;
       for (const [index, proposal] of selectedProposals.entries()) {
         const baseSlug = generateSlug(category.name, proposal.title);
         let slug = baseSlug;
@@ -1518,23 +1521,30 @@ function AdminWorkspace() {
               </div>
               <form className="plan-form" onSubmit={generateTopicPlan}>
                 <label>
-                  Category name
-                  <input id="topic-plan-category-name" value={topicPlanCategoryName} onChange={(event) => setTopicPlanCategoryName(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
-                  <small className="field-hint">Choose the category that will contain the generated topics; set the learner level below.</small>
+                  Category
+                  <input id="topic-plan-category-name" value={topicPlanCategoryName} onChange={(event) => {
+                    const categoryName = event.target.value;
+                    setTopicPlanCategoryName(categoryName);
+                    if (topicPlanCategory && topicPlanCategory.name.trim().toLowerCase() !== categoryName.trim().toLowerCase()) {
+                      setTopicPlanCategory(null);
+                    }
+                  }} placeholder="e.g. Java" maxLength={100} required />
+                  <small className="field-hint">Topics are generated under this Category. A matching existing Category is reused when you create selected Topics.</small>
                 </label>
                 <label>
-                  Audience / target role
-                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Beginner backend engineer" required />
-                  <small className="field-hint">Controls the depth and expectations of the generated topics.</small>
+                  Target interview role
+                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Senior Backend Engineer" required />
+                  <small className="field-hint">Sets the expected interview scope and seniority. Question difficulty is configured separately.</small>
                 </label>
                 <label>
-                  Additional guidance (optional)
+                  Topic guidance (optional)
                   <textarea
                     rows={3}
                     value={topicPlanGuidance}
                     onChange={(event) => setTopicPlanGuidance(event.target.value)}
-                    placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
+                    placeholder="Focus on Java Collections. Include List, Set, Map, Queue/Deque, immutable and concurrent collections. Avoid Streams."
                   />
+                  <small className="field-hint">Describe topics to include, exclude, emphasize, or organize. Leave blank to let AI choose based on the Category and target role.</small>
                 </label>
                 {topicPlanCategoryName.trim() && topics.some((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()) && (
                   <div className="topic-plan-existing">
