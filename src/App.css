@@ -956,6 +956,21 @@ select:disabled {
   border-color: transparent;
 }
 
+.page-item span.page-item-copy {
+  display: grid;
+  font: inherit;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.page-item-copy small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
 .page-item span {
   font: 12px 'DM Mono', monospace;
   overflow-wrap: anywhere;

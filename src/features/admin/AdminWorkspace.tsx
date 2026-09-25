@@ -97,6 +97,7 @@ function AdminWorkspace() {
     description: "",
     section: "",
     displayOrder: 0,
+    minimumDifficulty: "BEGINNER",
   });
   const [isPageFormOpen, setIsPageFormOpen] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(readDifficulty);
@@ -347,6 +348,7 @@ function AdminWorkspace() {
       description: loaded.description ?? "",
       section: loaded.section,
       displayOrder: loaded.displayOrder,
+      minimumDifficulty: loaded.minimumDifficulty ?? "BEGINNER",
     });
     setIsPageFormOpen(false);
   }, [selectedDifficulty]);
@@ -553,6 +555,7 @@ function AdminWorkspace() {
       description: "",
       section: "",
       displayOrder: pages.length,
+      minimumDifficulty: selectedDifficulty,
     });
     setIsPageFormOpen(true);
   };
@@ -605,8 +608,12 @@ function AdminWorkspace() {
             .slice(0, 50),
         }),
       }, undefined, 180_000)) as { pages: GeneratedPageProposal[]; usage?: AiUsage };
-      setGeneratedPageProposals(result.pages);
-      setSelectedPageProposalIndexes(result.pages.map((_, index) => index));
+      const proposals = result.pages.map((proposal) => ({
+        ...proposal,
+        minimumDifficulty: proposal.minimumDifficulty ?? "BEGINNER",
+      }));
+      setGeneratedPageProposals(proposals);
+      setSelectedPageProposalIndexes(proposals.map((_, index) => index));
       setAiUsage(result.usage ?? null);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -671,6 +678,7 @@ function AdminWorkspace() {
             description: proposal.description.trim() || null,
             sectionId: section.id,
             displayOrder: sectionPageCount + index,
+            minimumDifficulty: proposal.minimumDifficulty,
           }),
         });
       }
@@ -910,12 +918,14 @@ function AdminWorkspace() {
             description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
+            minimumDifficulty: pageForm.minimumDifficulty,
           }
         : {
             title: pageForm.title.trim(),
             description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
+            minimumDifficulty: pageForm.minimumDifficulty,
           };
       const result = (await request(
         isNew
@@ -1499,7 +1509,7 @@ function AdminWorkspace() {
                       onClick={() => setIsPageFormOpen((open) => !open)}
                     />
                   )}
-                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug}</span>}
+                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug} · from {pageForm.minimumDifficulty.toLowerCase()}</span>}
                 </div>
               </div>
             </div>
@@ -1582,6 +1592,22 @@ function AdminWorkspace() {
                   }
                   required
                 />
+              </label>
+              <label>
+                Minimum difficulty
+                <select
+                  value={pageForm.minimumDifficulty}
+                  onChange={(event) => setPageForm({
+                    ...pageForm,
+                    minimumDifficulty: event.target.value as Difficulty,
+                  })}
+                >
+                  <option value="BEGINNER">Beginner</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                  <option value="ADVANCED">Advanced</option>
+                  <option value="EXPERT">Expert</option>
+                </select>
+                <small className="field-hint">The earliest preparation level where this page becomes relevant.</small>
               </label>
               <label className="page-description-field">
                 Description
@@ -1687,6 +1713,15 @@ function AdminWorkspace() {
                         </div>
                       </div>
                       <label>Title<input value={proposal.title} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
+                      <label>
+                        Minimum difficulty
+                        <select value={proposal.minimumDifficulty} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimumDifficulty: event.target.value as Difficulty } : item))}>
+                          <option value="BEGINNER">Beginner</option>
+                          <option value="INTERMEDIATE">Intermediate</option>
+                          <option value="ADVANCED">Advanced</option>
+                          <option value="EXPERT">Expert</option>
+                        </select>
+                      </label>
                       <label>Description<textarea rows={2} value={proposal.description} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
                     </article>
                   ))}

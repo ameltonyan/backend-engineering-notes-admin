@@ -6,6 +6,7 @@ export type PageSummary = {
   description: string | null;
   section: string;
   displayOrder: number;
+  minimumDifficulty: Difficulty;
 };
 
 export type Section = {
@@ -39,6 +40,7 @@ export type PageForm = {
   description: string;
   section: string;
   displayOrder: number;
+  minimumDifficulty: Difficulty;
 };
 
 export type QuestionForm = {
@@ -57,4 +59,5 @@ export type QuestionForm = {
 export type GeneratedPageProposal = {
   title: string;
   description: string;
+  minimumDifficulty: Difficulty;
 };
