@@ -5,6 +5,7 @@ export type TopicSummary = {
   title: string;
   description: string | null;
   category: string;
+  categoryId: number;
   displayOrder: number;
 };
 
@@ -37,7 +38,7 @@ export type TopicForm = {
   slug: string;
   title: string;
   description: string;
-  category: string;
+  categoryId: number | null;
   displayOrder: number;
 };
 

@@ -15,6 +15,7 @@ type Props = {
   onSearchChange: (value: string) => void;
   onToggleCreateMenu: () => void;
   onNewTopic: () => void;
+  onNewCategory: () => void;
   onNewTopicPlan: () => void;
   onOpenStudyProgram: () => void;
   onToggleCategory: (category: string) => void;
@@ -27,7 +28,7 @@ type Props = {
 function ContentLibrary({
   topics, categories, topicsByCategory, selectedSlug, search, collapsedCategories, createMenuOpen, loading, difficulty,
   onDifficultyChange,
-  onSearchChange, onToggleCreateMenu, onNewTopic, onNewTopicPlan, onOpenStudyProgram, onToggleCategory,
+  onSearchChange, onToggleCreateMenu, onNewTopic, onNewCategory, onNewTopicPlan, onOpenStudyProgram, onToggleCategory,
   onSelectTopic, onMoveCategory, onMoveTopic, onOpenTopicPlan,
 }: Props) {
   return (
@@ -37,6 +38,7 @@ function ContentLibrary({
         <div className="create-content-actions">
           <button type="button" onClick={onToggleCreateMenu} disabled={loading}>New content</button>
           {createMenuOpen && <div className="create-content-menu" role="menu">
+            <button type="button" role="menuitem" onClick={onNewCategory}><strong>New category</strong><span>Organize topics in a category</span></button>
             <button type="button" role="menuitem" onClick={onNewTopic}><strong>New topic</strong><span>Write one topic yourself</span></button>
             <button type="button" role="menuitem" onClick={onNewTopicPlan}><strong>Generate topics with AI</strong><span>Create and review a topic plan</span></button>
             <button type="button" role="menuitem" onClick={onOpenStudyProgram}><strong>Weekly study program</strong><span>Publish a seven-day interview practice plan</span></button>
@@ -74,10 +76,11 @@ function ContentLibrary({
               <button type="button" aria-label={`Move ${item.title} down`} title="Move topic down" disabled={topicIndex === categoryTopics.length - 1 || loading} onClick={() => onMoveTopic(currentCategory.id, categoryTopics, item.slug, 1)}>↓</button>
             </div>}
           </div>)}
+          {!collapsedCategories[category] && !categoryTopics.length && <p className="muted">No topics yet.</p>}
         </div>;
       })}
-      {!topics.length && <p className="muted">No topics yet.</p>}
-      {topics.length > 0 && !topicsByCategory.length && <p className="muted">No topics match your search.</p>}
+      {!topics.length && !categories.length && !search.trim() && <p className="muted">No topics yet.</p>}
+      {search.trim() && !topicsByCategory.length && <p className="muted">No topics match your search.</p>}
       </div>
     </aside>
   );

@@ -5,6 +5,7 @@ import StatusBanner from "../../components/StatusBanner";
 import LoginPage from "../auth/LoginPage";
 import { clearCredentials, readCredentials, saveCredentials } from "../auth/authStorage";
 import ContentLibrary from "../content/ContentLibrary";
+import CategoryCreateDialog from "../content/CategoryCreateDialog";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
@@ -89,13 +90,14 @@ function AdminWorkspace() {
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+  const [categoryDialogSource, setCategoryDialogSource] = useState<"menu" | "inline" | null>(null);
   const [selectedSlug, setSelectedSlug] = useState("");
   const [topic, setTopic] = useState<Topic | null>(null);
   const [topicForm, setTopicForm] = useState<TopicForm>({
     slug: "",
     title: "",
     description: "",
-    category: "",
+    categoryId: null,
     displayOrder: 0,
   });
   const [isTopicFormOpen, setIsTopicFormOpen] = useState(true);
@@ -227,10 +229,6 @@ function AdminWorkspace() {
     return () => window.removeEventListener("scroll", updateScrollTopVisibility);
   }, []);
 
-  const categorySuggestions = Array.from(
-    new Set(categories.map((item) => item.name).filter(Boolean)),
-  ).sort();
-
   const normalizedSearch = topicSearch.trim().toLowerCase();
   const visibleTopics = topics.filter((item) =>
     [item.title, item.slug, item.category].some((value) =>
@@ -248,7 +246,7 @@ function AdminWorkspace() {
       categoryTopics.push(item);
       groups.set(category, categoryTopics);
       return groups;
-    }, new Map<string, TopicSummary[]>()),
+    }, new Map<string, TopicSummary[]>(normalizedSearch ? [] : categories.map((category) => [category.name, []]))),
   ).sort(([leftCategory, leftTopics], [rightCategory, rightTopics]) => {
     const orderDifference =
       (categoryOrder.get(leftCategory) ?? leftTopics[0]?.displayOrder ?? 0) -
@@ -317,6 +315,23 @@ function AdminWorkspace() {
     } catch (err) { setError(getErrorMessage(err)); } finally { setLoading(false); }
   };
 
+  const createCategory = async (name: string, displayOrder: number) => {
+    const created = (await request("/api/admin/categories", {
+      method: "POST",
+      body: JSON.stringify({ name, displayOrder }),
+    })) as Category;
+    await loadCategories();
+    if (categoryDialogSource === "inline") {
+      setTopicForm((current) => ({
+        ...current,
+        categoryId: created.id,
+        ...(!topic && !slugWasEdited ? { slug: generateSlug(created.name, current.title) } : {}),
+      }));
+    }
+    setCategoryDialogSource(null);
+    setNotice(`Category "${created.name}" created`);
+  };
+
   const getOrCreateCategory = async (name: string) => {
     const existing = categories.find(
       (category) => category.name.toLowerCase() === name.trim().toLowerCase(),
@@ -345,7 +360,7 @@ function AdminWorkspace() {
       slug: loaded.slug,
       title: loaded.title,
       description: loaded.description ?? "",
-      category: loaded.category,
+      categoryId: loaded.categoryId,
       displayOrder: loaded.displayOrder,
     });
     setIsTopicFormOpen(false);
@@ -551,7 +566,7 @@ function AdminWorkspace() {
       slug: "",
       title: "",
       description: "",
-      category: "",
+      categoryId: null,
       displayOrder: topics.length,
     });
     setIsTopicFormOpen(true);
@@ -778,8 +793,8 @@ function AdminWorkspace() {
     setError("");
     setNotice("");
     setTopicFieldError("");
-    if (!topicForm.category.trim() || !topicForm.title.trim() || !topicForm.slug.trim()) {
-      setTopicFieldError("Category, title, and slug are required.");
+    if (topicForm.categoryId === null || !categories.some((item) => item.id === topicForm.categoryId) || !topicForm.title.trim() || !topicForm.slug.trim()) {
+      setTopicFieldError("Choose a category and enter a title and slug.");
       return;
     }
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topicForm.slug.trim())) {
@@ -794,19 +809,23 @@ function AdminWorkspace() {
           "This slug already exists. Use a new slug, such as java-collections.",
         );
       }
-      const category = await getOrCreateCategory(topicForm.category);
+      if (topics.some((item) => item.categoryId === topicForm.categoryId
+        && item.title.trim().toLocaleLowerCase() === topicForm.title.trim().toLocaleLowerCase()
+        && item.slug !== topic?.slug)) {
+        throw new Error(`Topic "${topicForm.title.trim()}" already exists in this category.`);
+      }
       const payload = isNew
         ? {
             slug: topicForm.slug.trim(),
             title: topicForm.title.trim(),
             description: topicForm.description.trim() || null,
-            categoryId: category.id,
+            categoryId: topicForm.categoryId,
             displayOrder: topicForm.displayOrder,
           }
         : {
             title: topicForm.title.trim(),
             description: topicForm.description.trim() || null,
-            categoryId: category.id,
+            categoryId: topicForm.categoryId,
             displayOrder: topicForm.displayOrder,
           };
       const result = (await request(
@@ -1327,6 +1346,11 @@ function AdminWorkspace() {
         </div>
       </header>
       {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} topicPlanLoading={topicPlanLoading} />}
+      {categoryDialogSource && <CategoryCreateDialog
+        suggestedOrder={categories.length}
+        onCreate={createCategory}
+        onClose={() => setCategoryDialogSource(null)}
+      />}
       <div className="workspace">
         <ContentLibrary
           topics={topics}
@@ -1349,6 +1373,7 @@ function AdminWorkspace() {
           onSearchChange={setTopicSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
           onNewTopic={openNewTopic}
+          onNewCategory={() => { setIsCreateMenuOpen(false); setCategoryDialogSource("menu"); }}
           onNewTopicPlan={() => { setIsCreateMenuOpen(false); openNewTopicPlan(); }}
           onOpenStudyProgram={openStudyProgram}
           onToggleCategory={(category) => { setIsCreateMenuOpen(false); closeTopicPlan(); setCollapsedCategories((current) => ({ ...current, [category]: !current[category] })); }}
@@ -1391,41 +1416,30 @@ function AdminWorkspace() {
                       onClick={() => setIsTopicFormOpen((open) => !open)}
                     />
                   )}
-                  {!isTopicFormOpen && <span>{topicForm.category} · {topicForm.slug}</span>}
+                  {!isTopicFormOpen && <span>{categories.find((item) => item.id === topicForm.categoryId)?.name ?? topic?.category} · {topicForm.slug}</span>}
                 </div>
               </div>
             </div>
             {isTopicFormOpen && <form className="topic-form" id="topic-form" onSubmit={handleTopicSubmit}>
             <div className="form-fields">
-              <label>
-                <span className="field-label">
-                  Category <span className="label-note">(suggestions available)</span>
-                </span>
-                <input
-                  value={topicForm.category}
-                  list="category-suggestions"
-                  onChange={(event) => {
+              <div className="topic-category-field">
+                <label htmlFor="topic-category">Category</label>
+                <div className="category-picker">
+                  <select id="topic-category" value={topicForm.categoryId ?? ""} onChange={(event) => {
+                    const categoryId = event.target.value ? Number(event.target.value) : null;
+                    const categoryName = categories.find((item) => item.id === categoryId)?.name ?? "";
                     setTopicFieldError("");
-                    setTopicForm({
-                      ...topicForm,
-                      category: event.target.value,
-                      ...(topic || slugWasEdited
-                        ? {}
-                        : { slug: generateSlug(event.target.value, topicForm.title) }),
+                    setTopicForm({ ...topicForm, categoryId,
+                      ...(topic || slugWasEdited ? {} : { slug: generateSlug(categoryName, topicForm.title) }),
                     });
-                  }}
-                  required
-                />
-                <datalist id="category-suggestions">
-                  {categorySuggestions.map((category) => (
-                    <option key={category} value={category} />
-                  ))}
-                </datalist>
-                <small className="field-hint">
-                  Choose an existing category or type a new one.
-                </small>
+                  }} required>
+                    <option value="">Select category…</option>
+                    {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setCategoryDialogSource("inline")}>+ New category</button>
+                </div>
                 {topicFieldError && <small className="field-error">{topicFieldError}</small>}
-              </label>
+              </div>
               <label>
                 Title
                 <input
@@ -1437,7 +1451,7 @@ function AdminWorkspace() {
                       title: event.target.value,
                       ...(topic || slugWasEdited
                         ? {}
-                        : { slug: generateSlug(topicForm.category, event.target.value) }),
+                        : { slug: generateSlug(categories.find((item) => item.id === topicForm.categoryId)?.name ?? "", event.target.value) }),
                     });
                   }}
                   required
