@@ -1,14 +1,14 @@
 import type { AiGenerationMetadata, Difficulty } from "../questions/types";
 
-export type PageSummary = {
+export type TopicSummary = {
   slug: string;
   title: string;
   description: string | null;
-  section: string;
+  category: string;
   displayOrder: number;
 };
 
-export type Section = {
+export type Category = {
   id: number;
   name: string;
   displayOrder: number;
@@ -31,13 +31,13 @@ export type Question = {
 
 export type QuestionStatus = "DRAFT" | "REVIEWED" | "PUBLISHED";
 
-export type Page = PageSummary & { questions: Question[] };
+export type Topic = TopicSummary & { questions: Question[] };
 
-export type PageForm = {
+export type TopicForm = {
   slug: string;
   title: string;
   description: string;
-  section: string;
+  category: string;
   displayOrder: number;
 };
 
@@ -54,7 +54,7 @@ export type QuestionForm = {
   displayOrder: number;
 };
 
-export type GeneratedPageProposal = {
+export type GeneratedTopicProposal = {
   title: string;
   description: string;
 };

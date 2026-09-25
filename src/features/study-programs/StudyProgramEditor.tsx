@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { StudyDay, StudyProgramPage, StudyProgramPayload, WeeklyStudyProgram } from "./types";
+import type { StudyDay, StudyProgramTopic, StudyProgramPayload, WeeklyStudyProgram } from "./types";
 
 const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -15,21 +15,21 @@ function defaultStudyDays(): StudyDay[] {
   ].map(([theme, note], dayOfWeek) => ({
     dayOfWeek,
     theme,
-    pageSlugs: [],
+    topicSlugs: [],
     minutes: dayOfWeek > 4 ? 45 : 90,
     note,
   }));
 }
 
 type Props = {
-  pages: StudyProgramPage[];
+  topics: StudyProgramTopic[];
   programs: WeeklyStudyProgram[];
   loading: boolean;
   onSave: (programId: number | null, payload: StudyProgramPayload) => Promise<void>;
   onClose: () => void;
 };
 
-function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props) {
+function StudyProgramEditor({ topics, programs, loading, onSave, onClose }: Props) {
   const [editingProgramId, setEditingProgramId] = useState<number | null>(null);
   const [name, setName] = useState("Backend interview week");
   const [description, setDescription] = useState("Build interview confidence through focused practice, not passive reading.");
@@ -56,11 +56,11 @@ function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props
 
   return (
     <section className="plan-editor" aria-label="Weekly study program editor">
-      <div className="section-heading">
+      <div className="category-heading">
         <div>
           <p className="eyebrow">Weekly study program</p>
           <h3>{editingProgramId ? "Edit published program" : "Create prepared program"}</h3>
-          <span>Each day links to existing course pages. Learners track completion and weak points in their browser.</span>
+          <span>Each day links to existing course topics. Learners track completion and weak points in their browser.</span>
         </div>
       </div>
       <form className="plan-form" onSubmit={(event) => void submit(event)}>
@@ -73,7 +73,7 @@ function StudyProgramEditor({ pages, programs, loading, onSave, onClose }: Props
               <label className="generated-edit-field">Minutes<input type="number" min={15} max={240} value={day.minutes} onChange={(event) => updateDay(dayIndex, { minutes: Number(event.target.value) })} /></label>
             </div>
             <label>Focus<input value={day.theme} onChange={(event) => updateDay(dayIndex, { theme: event.target.value })} required /></label>
-            <label>Course pages<select multiple value={day.pageSlugs} onChange={(event) => updateDay(dayIndex, { pageSlugs: Array.from(event.target.selectedOptions, (option) => option.value) })}>{pages.map((page) => <option key={page.slug} value={page.slug}>{page.section} · {page.title}</option>)}</select><small className="field-hint">Select one or more existing pages.</small></label>
+            <label>Course topics<select multiple value={day.topicSlugs} onChange={(event) => updateDay(dayIndex, { topicSlugs: Array.from(event.target.selectedOptions, (option) => option.value) })}>{topics.map((topic) => <option key={topic.slug} value={topic.slug}>{topic.category} · {topic.title}</option>)}</select><small className="field-hint">Select one or more existing topics.</small></label>
             <label>Guidance<textarea rows={2} value={day.note} onChange={(event) => updateDay(dayIndex, { note: event.target.value })} /></label>
           </article>
         ))}

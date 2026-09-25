@@ -22,7 +22,7 @@ export default defineConfig([
     files: ['**/*.{ts,tsx}'],
     # Backend Engineering Notes Admin
       // Other configs...
-    Admin editor for the Backend Engineering Notes API. It manages pages and their question/answer content through authenticated `/api/admin/**` endpoints.
+    Admin editor for the Backend Engineering Notes API. It manages topics and their question/answer content through authenticated `/api/admin/**` endpoints.
       // Remove tseslint.configs.recommended and replace with this
     ## Local development
       // Alternatively, use this for stricter rules
@@ -31,6 +31,6 @@ export default defineConfig([
     VITE_API_BASE_URL=http://localhost:8080 npm run dev
     ```
       tseslint.configs.stylisticTypeChecked,
-    Configure the API host as the `VITE_API_BASE_URL` repository variable in the GitHub Pages environment. The deployment workflow publishes the app under `/backend-engineering-notes-admin/`.
+    Configure the API host as the `VITE_API_BASE_URL` repository variable in the GitHub Topics environment. The deployment workflow publishes the app under `/backend-engineering-notes-admin/`.
       // Other configs...
       parserOptions: {

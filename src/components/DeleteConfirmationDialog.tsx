@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 export type DeleteConfirmation =
-  | { type: "page"; title: string; slug: string }
+  | { type: "topic"; title: string; slug: string }
   | { type: "question"; id: number; title: string; childCount: number };
 
 type Props = {
@@ -16,14 +16,14 @@ function DeleteConfirmationDialog({ confirmation, loading, onCancel, onConfirm }
 
   if (!confirmation) return null;
 
-  const requiresTypedConfirmation = confirmation.type === "page";
+  const requiresTypedConfirmation = confirmation.type === "topic";
   const isConfirmed = !requiresTypedConfirmation || confirmationText.trim() === confirmation.slug;
 
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
         <p className="eyebrow">Confirm deletion</p>
-        <h2 id="delete-confirmation-title">Delete {confirmation.type === "page" ? "page" : "question"}?</h2>
+        <h2 id="delete-confirmation-title">Delete {confirmation.type === "topic" ? "topic" : "question"}?</h2>
         <p id="delete-confirmation-description">
           <strong>{confirmation.title}</strong> will be permanently removed.
           {confirmation.type === "question" && confirmation.childCount > 0
@@ -33,7 +33,7 @@ function DeleteConfirmationDialog({ confirmation, loading, onCancel, onConfirm }
         </p>
         {requiresTypedConfirmation && (
           <label className="delete-confirmation-input">
-            Type <code>{confirmation.slug}</code> to permanently delete this page.
+            Type <code>{confirmation.slug}</code> to permanently delete this topic.
             <input
               autoFocus
               value={confirmationText}
