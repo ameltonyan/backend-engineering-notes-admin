@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type DeleteConfirmation =
   | { type: "page"; title: string; slug: string }
@@ -13,10 +13,6 @@ type Props = {
 
 function DeleteConfirmationDialog({ confirmation, loading, onCancel, onConfirm }: Props) {
   const [confirmationText, setConfirmationText] = useState("");
-
-  useEffect(() => {
-    setConfirmationText("");
-  }, [confirmation]);
 
   if (!confirmation) return null;
 

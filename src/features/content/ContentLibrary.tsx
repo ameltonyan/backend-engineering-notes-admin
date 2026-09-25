@@ -68,7 +68,7 @@ function ContentLibrary({
             </div>}
           </div>
           {!collapsedSections[section] && sectionPages.map((item, pageIndex) => <div className={item.slug === selectedSlug ? "page-item active" : "page-item"} key={item.slug}>
-            <button type="button" className="page-select" title={`Slug: ${item.slug}`} aria-label={`${item.title}. Slug: ${item.slug}`} onClick={() => onSelectPage(item.slug)}><span className="page-index" aria-hidden="true">{String(pageIndex + 1).padStart(2, "0")}</span><span className="page-item-copy"><strong>{item.title}</strong><small>From {item.minimumDifficulty.toLowerCase()}</small></span></button>
+            <button type="button" className="page-select" title={`Slug: ${item.slug}`} aria-label={`${item.title}. Slug: ${item.slug}`} onClick={() => onSelectPage(item.slug)}><span className="page-index" aria-hidden="true">{String(pageIndex + 1).padStart(2, "0")}</span><span className="page-item-copy"><strong>{item.title}</strong><small>{item.slug}</small></span></button>
             {item.slug === selectedSlug && currentSection && <div className="page-order-actions" aria-label={`Change ${item.title} page order`}>
               <button type="button" aria-label={`Move ${item.title} up`} title="Move page up" disabled={pageIndex === 0 || loading} onClick={() => onMovePage(currentSection.id, sectionPages, item.slug, -1)}>↑</button>
               <button type="button" aria-label={`Move ${item.title} down`} title="Move page down" disabled={pageIndex === sectionPages.length - 1 || loading} onClick={() => onMovePage(currentSection.id, sectionPages, item.slug, 1)}>↓</button>

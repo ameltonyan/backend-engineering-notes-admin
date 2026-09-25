@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import AiLoadingOverlay from "../../components/AiLoadingOverlay";
 import DeleteConfirmationDialog, { type DeleteConfirmation } from "../../components/DeleteConfirmationDialog";
 import StatusBanner from "../../components/StatusBanner";
@@ -8,7 +8,7 @@ import ContentLibrary from "../content/ContentLibrary";
 import { getPage, listPages, listSections } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedPageProposal, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
-import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
+import { questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
@@ -97,7 +97,6 @@ function AdminWorkspace() {
     description: "",
     section: "",
     displayOrder: 0,
-    minimumDifficulty: "BEGINNER",
   });
   const [isPageFormOpen, setIsPageFormOpen] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(readDifficulty);
@@ -348,7 +347,6 @@ function AdminWorkspace() {
       description: loaded.description ?? "",
       section: loaded.section,
       displayOrder: loaded.displayOrder,
-      minimumDifficulty: loaded.minimumDifficulty ?? "BEGINNER",
     });
     setIsPageFormOpen(false);
   }, [selectedDifficulty]);
@@ -555,7 +553,6 @@ function AdminWorkspace() {
       description: "",
       section: "",
       displayOrder: pages.length,
-      minimumDifficulty: selectedDifficulty,
     });
     setIsPageFormOpen(true);
   };
@@ -608,10 +605,7 @@ function AdminWorkspace() {
             .slice(0, 50),
         }),
       }, undefined, 180_000)) as { pages: GeneratedPageProposal[]; usage?: AiUsage };
-      const proposals = result.pages.map((proposal) => ({
-        ...proposal,
-        minimumDifficulty: proposal.minimumDifficulty ?? "BEGINNER",
-      }));
+      const proposals = result.pages;
       setGeneratedPageProposals(proposals);
       setSelectedPageProposalIndexes(proposals.map((_, index) => index));
       setAiUsage(result.usage ?? null);
@@ -678,7 +672,6 @@ function AdminWorkspace() {
             description: proposal.description.trim() || null,
             sectionId: section.id,
             displayOrder: sectionPageCount + index,
-            minimumDifficulty: proposal.minimumDifficulty,
           }),
         });
       }
@@ -768,115 +761,6 @@ function AdminWorkspace() {
     setDetailsGenerationReady(false);
   };
 
-  const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
-    if (!hasVisibleQuestion(question)) return null;
-    const children = orderedQuestions.filter((candidate) => candidate.parentQuestionId === question.id);
-    const isExpanded = expandedQuestions[question.id] !== false;
-    const isSelected = selectedQuestionId === question.id;
-    const childNodes = children.map((child, index) => renderQuestionNode(child, index));
-
-    return (
-      <article id={`question-node-${question.id}`} className={`tree-node depth-${Math.min(question.depth, 5)}${isSelected ? " selected" : ""}`} key={question.id}>
-        <div className="tree-node-row">
-          <button
-            className="tree-node-toggle"
-            type="button"
-            aria-expanded={children.length ? isExpanded : undefined}
-            aria-label={`Select ${question.question}`}
-            onClick={() => {
-              if (isSelected) {
-                setSelectedQuestionId(null);
-                closeQuestionForm();
-                setIsAiPanelOpen(false);
-                closePagePlan();
-                return;
-              }
-              closeQuestionForm();
-              setIsAiPanelOpen(false);
-              closePagePlan();
-              setSelectedQuestionId(question.id);
-              setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
-              if (children.length) {
-                setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
-              }
-            }}
-          >
-            <span className="tree-branch" aria-hidden="true">{children.length ? (isExpanded ? "▾" : "▸") : "·"}</span>
-            {question.depth === 0 && <span className="question-number" aria-label={`Main question ${siblingIndex + 1}`}>{siblingIndex + 1}</span>}
-            <span className="tree-node-copy">
-              <strong>{question.question}</strong>
-              <span className="tree-meta">
-                {questionKind(question.depth)} <span className={`question-status-indicator status-${question.status.toLowerCase()}`} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
-              </span>
-            </span>
-          </button>
-        </div>
-        {isSelected && (
-          <section className="selected-question-card" aria-label={`Selected ${questionKind(question.depth).toLowerCase()}`}>
-            <div className="selected-question-context">
-              <span>{questionKind(question.depth)} · Level {question.depth}</span>
-              <span>Order {question.displayOrder + 1} of {selectedSiblings.length}</span>
-              <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
-            </div>
-            <div className="question-disclosures">
-              <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedAnswers[question.id])}
-                onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
-              </button>
-              {question.example && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedExamples[question.id])}
-                onClick={() => setRevealedExamples((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedExamples[question.id] ? "Hide example" : "Show example"}
-              </button>}
-              {question.codeSnippet && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedCodeSnippets[question.id])}
-                onClick={() => setRevealedCodeSnippets((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedCodeSnippets[question.id] ? "Hide code" : "Show code"}
-              </button>}
-              {question.tags.length > 0 && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedTags[question.id])}
-                onClick={() => setRevealedTags((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedTags[question.id] ? "Hide tags" : "Show tags"}
-              </button>}
-            </div>
-            {revealedAnswers[question.id] && <p className="inline-answer">{question.answer}</p>}
-            {revealedExamples[question.id] && question.example && <p className="inline-answer inline-example">{question.example}</p>}
-            {revealedCodeSnippets[question.id] && question.codeSnippet && <pre className="inline-code-snippet"><code>{question.codeSnippet}</code></pre>}
-            {revealedTags[question.id] && question.tags.length > 0 && <div className="inline-tags">{question.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
-            <div className="selected-question-actions" aria-label="Question actions">
-              <div className="order-actions" aria-label="Change question order">
-                <button type="button" aria-label="Move question up" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => moveQuestion(question.id, -1)}>↑</button>
-                <button type="button" aria-label="Move question down" title={selectedSiblingIndex < selectedSiblings.length - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblings.length - 1} onClick={() => moveQuestion(question.id, 1)}>↓</button>
-              </div>
-              <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
-              <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
-              <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups</button>
-              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => prepareDetailsGeneration(question)}>
-                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
-              </button>
-              <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
-            </div>
-          </section>
-        )}
-        {isExpanded && childNodes.length > 0 && <div className="tree-children">{childNodes}</div>}
-      </article>
-    );
-  };
-
   const handleLogin = async (username: string, password: string) => {
     setError("");
     const encoded = btoa(`${username}:${password}`);
@@ -918,14 +802,12 @@ function AdminWorkspace() {
             description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
-            minimumDifficulty: pageForm.minimumDifficulty,
           }
         : {
             title: pageForm.title.trim(),
             description: pageForm.description.trim() || null,
             sectionId: section.id,
             displayOrder: pageForm.displayOrder,
-            minimumDifficulty: pageForm.minimumDifficulty,
           };
       const result = (await request(
         isNew
@@ -1509,7 +1391,7 @@ function AdminWorkspace() {
                       onClick={() => setIsPageFormOpen((open) => !open)}
                     />
                   )}
-                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug} · from {pageForm.minimumDifficulty.toLowerCase()}</span>}
+                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug}</span>}
                 </div>
               </div>
             </div>
@@ -1592,22 +1474,6 @@ function AdminWorkspace() {
                   }
                   required
                 />
-              </label>
-              <label>
-                Minimum difficulty
-                <select
-                  value={pageForm.minimumDifficulty}
-                  onChange={(event) => setPageForm({
-                    ...pageForm,
-                    minimumDifficulty: event.target.value as Difficulty,
-                  })}
-                >
-                  <option value="BEGINNER">Beginner</option>
-                  <option value="INTERMEDIATE">Intermediate</option>
-                  <option value="ADVANCED">Advanced</option>
-                  <option value="EXPERT">Expert</option>
-                </select>
-                <small className="field-hint">The earliest preparation level where this page becomes relevant.</small>
               </label>
               <label className="page-description-field">
                 Description
@@ -1713,15 +1579,6 @@ function AdminWorkspace() {
                         </div>
                       </div>
                       <label>Title<input value={proposal.title} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
-                      <label>
-                        Minimum difficulty
-                        <select value={proposal.minimumDifficulty} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, minimumDifficulty: event.target.value as Difficulty } : item))}>
-                          <option value="BEGINNER">Beginner</option>
-                          <option value="INTERMEDIATE">Intermediate</option>
-                          <option value="ADVANCED">Advanced</option>
-                          <option value="EXPERT">Expert</option>
-                        </select>
-                      </label>
                       <label>Description<textarea rows={2} value={proposal.description} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
                     </article>
                   ))}
@@ -2268,6 +2125,7 @@ function AdminWorkspace() {
         </button>
       )}
       <DeleteConfirmationDialog
+        key={deleteConfirmation ? `${deleteConfirmation.type}:${deleteConfirmation.type === "page" ? deleteConfirmation.slug : deleteConfirmation.id}` : "closed"}
         confirmation={deleteConfirmation}
         loading={loading}
         onCancel={() => setDeleteConfirmation(null)}
