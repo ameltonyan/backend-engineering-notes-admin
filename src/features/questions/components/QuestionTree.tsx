@@ -124,18 +124,26 @@ export default function QuestionTree({
             {revealedCodeSnippets[question.id] && question.codeSnippet && <pre className="inline-code-snippet"><code>{question.codeSnippet}</code></pre>}
             {revealedTags[question.id] && question.tags.length > 0 && <div className="inline-tags">{question.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
             <div className="selected-question-actions" aria-label="Question actions">
-              <div className="order-actions" aria-label="Change question order">
-                <button type="button" aria-label="Move question up" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => onMove(question.id, -1)}>↑</button>
-                <button type="button" aria-label="Move question down" title={selectedSiblingIndex < selectedSiblingCount - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblingCount - 1} onClick={() => onMove(question.id, 1)}>↓</button>
-              </div>
               <button type="button" title="Edit question" onClick={() => onEdit(question)}>Edit</button>
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => onImprove(question)}>Improve with AI</button>
               <button type="button" title="Add a follow-up question" onClick={() => onAddFollowUp(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" disabled={isAiBusy} onClick={onGenerateFollowUps}>Generate follow-ups</button>
-              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => onGenerateDetails(question)}>
-                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
-              </button>
-              <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => onDelete(question, descendantCount(question.id, questions))}>Delete</button>
+              <details className="question-action-menu">
+                <summary>AI actions</summary>
+                <div className="question-action-menu-items">
+                  <button type="button" disabled={isAiBusy} onClick={onGenerateFollowUps}>Generate follow-ups</button>
+                  <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => onGenerateDetails(question)}>
+                    {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
+                  </button>
+                </div>
+              </details>
+              <details className="question-action-menu">
+                <summary>More</summary>
+                <div className="question-action-menu-items">
+                  <button type="button" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => onMove(question.id, -1)}>Move up</button>
+                  <button type="button" title={selectedSiblingIndex < selectedSiblingCount - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblingCount - 1} onClick={() => onMove(question.id, 1)}>Move down</button>
+                  <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => onDelete(question, descendantCount(question.id, questions))}>Delete</button>
+                </div>
+              </details>
             </div>
           </section>
         )}

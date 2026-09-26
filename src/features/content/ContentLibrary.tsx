@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import type { TopicSummary, Category } from "./types";
-import type { Difficulty } from "../questions/types";
 
 type Props = {
   topics: TopicSummary[];
@@ -11,8 +10,6 @@ type Props = {
   collapsedCategories: Record<string, boolean>;
   createMenuOpen: boolean;
   loading: boolean;
-  difficulty: Difficulty;
-  onDifficultyChange: (difficulty: Difficulty) => void;
   onSearchChange: (value: string) => void;
   onToggleCreateMenu: () => void;
   onCloseCreateMenu: () => void;
@@ -28,8 +25,7 @@ type Props = {
 };
 
 function ContentLibrary({
-  topics, categories, topicsByCategory, selectedSlug, search, collapsedCategories, createMenuOpen, loading, difficulty,
-  onDifficultyChange,
+  topics, categories, topicsByCategory, selectedSlug, search, collapsedCategories, createMenuOpen, loading,
   onSearchChange, onToggleCreateMenu, onCloseCreateMenu, onNewTopic, onNewCategory, onNewTopicPlan, onOpenStudyProgram, onToggleCategory,
   onSelectTopic, onMoveCategory, onMoveTopic, onOpenTopicPlan,
 }: Props) {
@@ -62,16 +58,6 @@ function ContentLibrary({
           </div>}
         </div>
       </div>
-      <label className="content-level-filter">
-        <span>Content difficulty</span>
-        <select value={difficulty} onChange={(event) => onDifficultyChange(event.target.value as Difficulty)} disabled={loading}>
-          <option value="BEGINNER">Beginner</option>
-          <option value="INTERMEDIATE">Intermediate</option>
-          <option value="ADVANCED">Advanced</option>
-          <option value="EXPERT">Expert</option>
-        </select>
-        <small>Questions shown and newly created use this level.</small>
-      </label>
       <label className="search-field"><span>Find a topic</span><input type="search" value={search} onChange={(event) => onSearchChange(event.target.value)} placeholder="Title, slug, or category" /></label>
       <div className="topic-list-scroll" aria-label="Content topics">
       {topicsByCategory.map(([category, categoryTopics]) => {

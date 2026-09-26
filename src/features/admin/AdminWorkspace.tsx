@@ -1373,15 +1373,6 @@ function AdminWorkspace() {
           collapsedCategories={collapsedCategories}
           createMenuOpen={isCreateMenuOpen}
           loading={loading}
-          difficulty={selectedDifficulty}
-          onDifficultyChange={(difficulty) => {
-            setSelectedDifficulty(difficulty);
-            setGeneratedQuestions([]);
-            setMergedQuestion(null);
-            setSelectedGeneratedIndexes([]);
-            setIsAiPanelOpen(false);
-            setIsQuestionFormOpen(false);
-          }}
           onSearchChange={setTopicSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
           onCloseCreateMenu={() => setIsCreateMenuOpen(false)}
@@ -1642,6 +1633,23 @@ function AdminWorkspace() {
                   </button>
                 </div>
               </div>
+              <label className="workspace-difficulty">
+                <span>Question difficulty</span>
+                <select value={selectedDifficulty} onChange={(event) => {
+                  setSelectedDifficulty(event.target.value as Difficulty);
+                  setGeneratedQuestions([]);
+                  setMergedQuestion(null);
+                  setSelectedGeneratedIndexes([]);
+                  setIsAiPanelOpen(false);
+                  setIsQuestionFormOpen(false);
+                }} disabled={loading || isAiBusy}>
+                  <option value="BEGINNER">Beginner</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                  <option value="ADVANCED">Advanced</option>
+                  <option value="EXPERT">Expert</option>
+                </select>
+                <small>Used when viewing, creating, and generating questions for this topic.</small>
+              </label>
               <div className="question-filter-bar">
                 <label className="search-field question-search">
                   <span>Find a question</span>
@@ -1921,13 +1929,13 @@ function AdminWorkspace() {
                   <div className="ai-fields">
                     <label className="ai-field">
                       <span className="ai-field-label">Difficulty</span>
-                      <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from content difficulty">
+                      <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from the question workspace">
                         <option value="BEGINNER">Beginner</option>
                         <option value="INTERMEDIATE">Intermediate</option>
                         <option value="ADVANCED">Advanced</option>
                         <option value="EXPERT">Expert</option>
                       </select>
-                      <small className="field-hint">Inherited from the selected content difficulty.</small>
+                      <small className="field-hint">Inherited from the question workspace.</small>
                     </label>
                     <label className="ai-field">
                       <span className="ai-field-label">Type</span>
