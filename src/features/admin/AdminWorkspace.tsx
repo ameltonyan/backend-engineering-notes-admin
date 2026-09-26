@@ -360,10 +360,14 @@ function AdminWorkspace() {
     }
   };
 
-  const loadTopic = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
+  const loadTopic = useCallback(async (
+    slug: string,
+    difficulty: Difficulty = selectedDifficulty,
+    preserveAiPanel = false,
+  ) => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
-    setIsAiPanelOpen(false);
+    if (!preserveAiPanel) setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
@@ -1176,7 +1180,7 @@ function AdminWorkspace() {
       setSelectedGeneratedIndexes((current) => current
         .filter((index) => index !== removedIndex)
         .map((index) => index > removedIndex ? index - 1 : index));
-      await loadTopic(topic.slug);
+      await loadTopic(topic.slug, selectedDifficulty, generatedQuestions.length > 1);
       setNotice(editingExistingQuestion ? "Question updated" : "Question saved");
     } catch (err) {
       setError(getErrorMessage(err));
