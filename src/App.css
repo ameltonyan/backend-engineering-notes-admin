@@ -2292,3 +2292,52 @@ button:disabled {
     width: 100%;
   }
 }
+
+.question-count-control {
+  display: grid;
+  grid-template-columns: 42px minmax(48px, 1fr) 42px;
+  min-height: 44px;
+}
+
+.question-count-control button,
+.question-count-control input {
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  text-align: center;
+}
+
+.question-count-control button {
+  padding: 0;
+  color: var(--green-dark);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.question-count-control button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.question-count-control button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.question-count-control input {
+  appearance: textfield;
+  border-right: 0;
+  border-left: 0;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.question-count-control input::-webkit-inner-spin-button,
+.question-count-control input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.ai-alternatives-toggle {
+  min-height: 36px;
+  margin-top: 8px;
+}

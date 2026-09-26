@@ -137,7 +137,7 @@ function AdminWorkspace() {
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
   const [aiIdea, setAiIdea] = useState("");
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
-  const [aiCount, setAiCount] = useState(3);
+  const [aiCount, setAiCount] = useState(1);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestionDraft | null>(null);
@@ -280,6 +280,11 @@ function AdminWorkspace() {
       (child) => child.parentQuestionId === question.id && hasVisibleQuestion(child),
     );
   const rootQuestions = orderedQuestions.filter((question) => question.parentQuestionId === null);
+  const isAlternativeGeneration = aiGenerateAlternatives
+    && (aiGenerationMode === "follow-up" || (aiGenerationMode === "main" && aiCount === 1));
+  const isMultipleQuestionGeneration = aiGenerationMode === "main"
+    && generatedQuestions.length > 1
+    && !isAlternativeGeneration;
   const questionStatusCounts = QUESTION_STATUS_OPTIONS.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
     counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
     return counts;
@@ -523,7 +528,7 @@ function AdminWorkspace() {
 
   const focusAiGeneration = (mode: AiGenerationMode = "main") => {
     setAiGenerationMode(mode);
-    setAiCount(mode === "batch-main" ? 10 : 1);
+    setAiCount(1);
     setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
@@ -906,7 +911,7 @@ function AdminWorkspace() {
       setError("Select a parent question before generating follow-ups.");
       return;
     }
-    if (aiGenerationMode === "batch-main" && (!Number.isInteger(aiCount) || aiCount < 1 || aiCount > maxBatchQuestionCount)) {
+    if (aiGenerationMode === "main" && (!Number.isInteger(aiCount) || aiCount < 1 || aiCount > maxBatchQuestionCount)) {
       setError(`Number of questions must be between 1 and ${maxBatchQuestionCount}.`);
       return;
     }
@@ -937,8 +942,8 @@ function AdminWorkspace() {
             topicDescription: topic?.description ?? "",
             difficulty: selectedDifficulty,
             type: aiType,
-            count: aiGenerationMode === "batch-main"
-              ? aiCount
+            count: aiGenerationMode === "main"
+              ? aiGenerateAlternatives && aiCount === 1 ? 2 : aiCount
               : aiGenerateAlternatives
                 ? Math.min(Math.max(aiCount, 1), 2)
                 : 1,
@@ -1629,10 +1634,7 @@ function AdminWorkspace() {
                 </div>
                 <div className="question-actions">
                     <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("main")}>
-                    AI generate question
-                  </button>
-                  <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("batch-main")}>
-                    Generate multiple questions with AI
+                    Generate questions with AI
                   </button>
                   <button className="manual-action" type="button" onClick={() => startQuestionCreation(null)}>
                     <span aria-hidden="true">+</span>
@@ -1861,8 +1863,8 @@ function AdminWorkspace() {
                 <div className="category-heading">
                   <div>
                     <p className="eyebrow">AI assist</p>
-                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Generate multiple questions with AI" : "Generate question with AI"}</h3>
-                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Generate up to 10 main-question drafts, then review and edit them before saving." : "Generate one draft to review before adding it."}</span>
+                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : "Generate questions with AI"}</h3>
+                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerateAlternatives && aiCount === 1 ? "Compare two alternatives, choose one, or merge them into a combined result." : "Set the number of drafts to generate, then review before saving."}</span>
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
@@ -1939,19 +1941,24 @@ function AdminWorkspace() {
                         <option value="TRICK">Trick question</option>
                       </select>
                     </label>
-                    {aiGenerationMode === "batch-main" && (
-                      <label className="ai-field">
+                    {aiGenerationMode === "main" && editingQuestionId === null && (
+                      <div className="ai-field question-count-field">
                         <span className="ai-field-label">Number of questions</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={maxBatchQuestionCount}
-                          value={aiCount}
-                          onChange={(event) => setAiCount(Number(event.target.value))}
-                        />
-                      </label>
+                        <div className="question-count-control">
+                          <button type="button" aria-label="Generate one fewer question" disabled={aiCount <= 1} onClick={() => { setAiCount((current) => current - 1); setAiGenerateAlternatives(false); }}>−</button>
+                          <input type="number" min={1} max={maxBatchQuestionCount} aria-label="Number of questions" value={aiCount} onChange={(event) => { const nextCount = Number(event.target.value); setAiCount(nextCount); if (nextCount !== 1) setAiGenerateAlternatives(false); }} />
+                          <button type="button" aria-label="Generate one more question" disabled={aiCount >= maxBatchQuestionCount} onClick={() => { setAiCount((current) => current + 1); setAiGenerateAlternatives(false); }}>+</button>
+                        </div>
+                        <small className="field-hint">Choose 1–10 drafts. One is fastest when you want a focused result.</small>
+                        {aiCount === 1 && (
+                          <label className="checkbox-label ai-alternatives-toggle">
+                            <input type="checkbox" checked={aiGenerateAlternatives} onChange={(event) => setAiGenerateAlternatives(event.target.checked)} />
+                            Generate two alternatives
+                          </label>
+                        )}
+                      </div>
                     )}
-                    {aiGenerationMode !== "batch-main" && (
+                    {aiGenerationMode === "follow-up" && (
                       <div className="ai-field ai-alternatives-field">
                         <span className="ai-field-label">Options</span>
                         <label className="checkbox-label">
@@ -1961,7 +1968,6 @@ function AdminWorkspace() {
                             onChange={(event) => {
                               const enabled = event.target.checked;
                               setAiGenerateAlternatives(enabled);
-                              setAiCount(enabled ? 2 : 1);
                             }}
                           />
                           Generate alternatives
@@ -1971,7 +1977,7 @@ function AdminWorkspace() {
                   </div>
                   <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>
-                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Generate questions" : "Generate question"}
+                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiCount > 1 ? "Generate questions" : "Generate question"}
                     </button>
                     <button type="button" disabled={isAiBusy} onClick={closeAiPanel}>Close</button>
                   </div>
@@ -1984,7 +1990,7 @@ function AdminWorkspace() {
                         <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
                       )}
                     </div>
-                    <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
+                    <p className="field-hint">{isMultipleQuestionGeneration ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
                     <div className="generated-bulk-actions" role="group" aria-label="Bulk publishing status">
                       <span>Bulk publishing status</span>
                       <button
@@ -2027,7 +2033,7 @@ function AdminWorkspace() {
                           />
                           <span className="eyebrow">Option {index + 1}</span>
                         </label>
-                        {aiGenerationMode === "batch-main" ? (
+                        {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Question</span>
                             <input value={generated.question} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
@@ -2040,13 +2046,13 @@ function AdminWorkspace() {
                           onChange={(status) => updateGeneratedQuestionStatus(generated.draftId, status)}
                           name={`generated-question-status-${generated.draftId}`}
                         />
-                        {aiGenerationMode === "batch-main" ? (
+                        {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Answer</span>
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
-                        {aiGenerationMode === "batch-main" ? <>
+                        {isMultipleQuestionGeneration ? <>
                           <label className="generated-edit-field">
                             <span>Example</span>
                             <textarea rows={4} value={generated.example} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
@@ -2110,7 +2116,7 @@ function AdminWorkspace() {
                           </div>
                         )}
                         <div className="actions">
-                          {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
+                          {!isMultipleQuestionGeneration && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
                           </button>}
                           <button
@@ -2121,7 +2127,7 @@ function AdminWorkspace() {
                           >
                             {savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
                           </button>
-                          {aiGenerationMode === "batch-main" && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
+                          {isMultipleQuestionGeneration && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
                         </div>
                       </article>
                     ))}
@@ -2139,7 +2145,10 @@ function AdminWorkspace() {
                       </article>
                     )}
                     <div className="actions generated-actions">
-                      {aiGenerationMode === "batch-main" ? <>
+                      {isMultipleQuestionGeneration ? <>
+                        <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length !== 2} onClick={mergeSelectedQuestions}>
+                          {aiLoading ? "Merging..." : "Merge selected"}
+                        </button>
                         <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length === 0} onClick={saveSelectedGeneratedQuestions}>
                           {aiLoading ? "Saving..." : `Save selected (${selectedGeneratedIndexes.length})`}
                         </button>

@@ -1,6 +1,6 @@
 export type Difficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
 export type QuestionType = "CONCEPTUAL" | "CODE" | "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SCENARIO" | "INTERVIEW" | "TRICK";
-export type AiGenerationMode = "main" | "batch-main" | "follow-up";
+export type AiGenerationMode = "main" | "follow-up";
 
 export type AiGenerationMetadata = {
   generationRunId: string;
