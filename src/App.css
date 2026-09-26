@@ -1141,6 +1141,10 @@ select:disabled {
 }
 
 .topic-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-top: 26px;
 }
 
@@ -1207,6 +1211,7 @@ select:disabled {
 
 .form-actions {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   grid-column: 3 / -1;
   justify-self: end;

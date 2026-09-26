@@ -1399,15 +1399,6 @@ function AdminWorkspace() {
                 <p className="eyebrow">{topic ? "Editing topic" : "New topic"}</p>
                 <h2>{topic?.title ?? (topics.length ? "Create a new topic" : "Create your first topic")}</h2>
               </div>
-              {topic && (
-                <button
-                  className="danger"
-                  type="button"
-                  onClick={() => setDeleteConfirmation({ type: "topic", title: topic.title, slug: topic.slug })}
-                >
-                  Delete topic
-                </button>
-              )}
             </div>
             <div className="topic-form-heading">
               <div>
@@ -1507,6 +1498,15 @@ function AdminWorkspace() {
                 <small className="field-hint">A short summary for this topic.</small>
               </label>
               <div className="form-actions">
+                {topic && (
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() => setDeleteConfirmation({ type: "topic", title: topic.title, slug: topic.slug })}
+                  >
+                    Delete topic
+                  </button>
+                )}
                 <button className="primary" type="submit">
                   {topic ? "Save topic" : "Create topic"}
                 </button>

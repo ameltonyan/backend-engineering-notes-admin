@@ -135,7 +135,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
               onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} />}
             {field.description && <small>{field.description}</small>}
           </label>)}
-          <button className="secondary ai-settings-save" type="button" disabled={saving} onClick={() => void saveProviderSettings()}>
+          <button className="primary ai-settings-save" type="button" disabled={saving} onClick={() => void saveProviderSettings()}>
             {saving ? "Saving…" : "Save AI settings"}
           </button>
           <p className="ai-settings-hint">Use the exact model ID available to your provider account.</p>
