@@ -1953,7 +1953,7 @@ function AdminWorkspace() {
                       <div className="ai-field question-count-field">
                         <span className="ai-field-label">Number of questions</span>
                         <div className="question-count-control">
-                          <button type="button" aria-label="Generate one fewer question" disabled={aiCount <= 1} onClick={() => { setAiCount((current) => current - 1); setAiGenerateAlternatives(false); }}>−</button>
+                          <button type="button" aria-label="Generate one fewer question" onClick={() => { setAiCount((current) => current <= 1 ? maxBatchQuestionCount : current - 1); setAiGenerateAlternatives(false); }}>−</button>
                           <input type="number" min={1} max={maxBatchQuestionCount} aria-label="Number of questions" value={aiCount} onChange={(event) => { const nextCount = Number(event.target.value); setAiCount(nextCount); if (nextCount !== 1) setAiGenerateAlternatives(false); }} />
                           <button type="button" aria-label="Generate one more question" disabled={aiCount >= maxBatchQuestionCount} onClick={() => { setAiCount((current) => current + 1); setAiGenerateAlternatives(false); }}>+</button>
                         </div>
