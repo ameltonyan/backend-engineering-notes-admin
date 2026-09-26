@@ -9,7 +9,7 @@ import CategoryCreateDialog from "../content/CategoryCreateDialog";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
-import { questionPreview } from "../questions/questionUtils";
+import { descendantCount, questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
@@ -140,6 +140,7 @@ function AdminWorkspace() {
   const [aiCount, setAiCount] = useState(1);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
+  const [savedGeneratedQuestionIds, setSavedGeneratedQuestionIds] = useState<Record<string, boolean>>({});
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestionDraft | null>(null);
   const [selectedGeneratedIndexes, setSelectedGeneratedIndexes] = useState<number[]>([]);
   const [answerImprovements, setAnswerImprovements] = useState<Record<string, AnswerImprovement>>({});
@@ -264,12 +265,6 @@ function AdminWorkspace() {
   const questionById = new Map(orderedQuestions.map((question) => [question.id, question]));
   const selectedQuestion = selectedQuestionId ? questionById.get(selectedQuestionId) : undefined;
   const isDetailsGeneration = detailsGenerationTargetId !== null && detailsGenerationTargetId === editingQuestionId;
-  const selectedSiblings = selectedQuestion
-    ? orderedQuestions.filter((question) => question.parentQuestionId === selectedQuestion.parentQuestionId)
-    : [];
-  const selectedSiblingIndex = selectedQuestion
-    ? selectedSiblings.findIndex((question) => question.id === selectedQuestion.id)
-    : -1;
   const matchesQuestionFilters = (question: Question) =>
     (questionStatusFilter === "ALL" || question.status === questionStatusFilter)
     && (!normalizedQuestionSearch || [question.question, question.answer].some((value) =>
@@ -285,6 +280,7 @@ function AdminWorkspace() {
   const isMultipleQuestionGeneration = aiGenerationMode === "main"
     && generatedQuestions.length > 1
     && !isAlternativeGeneration;
+  const unsavedGeneratedQuestions = generatedQuestions.filter((question) => !savedGeneratedQuestionIds[question.draftId]);
   const questionStatusCounts = QUESTION_STATUS_OPTIONS.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
     counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
     return counts;
@@ -360,10 +356,14 @@ function AdminWorkspace() {
     }
   };
 
-  const loadTopic = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
+  const loadTopic = useCallback(async (
+    slug: string,
+    difficulty: Difficulty = selectedDifficulty,
+    preserveAiPanel = false,
+  ) => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
-    setIsAiPanelOpen(false);
+    if (!preserveAiPanel) setIsAiPanelOpen(false);
     setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
@@ -956,6 +956,7 @@ function AdminWorkspace() {
         body: JSON.stringify(payload),
       }, undefined, 200_000)) as GeneratedQuestionsResult;
       setGeneratedQuestions(createGeneratedDrafts(result.questions, result.generation));
+      setSavedGeneratedQuestionIds({});
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
       setAnswerImprovements({});
@@ -1035,8 +1036,9 @@ function AdminWorkspace() {
   };
 
   const saveGeneratedQuestions = async (questions: GeneratedQuestionDraft[]) => {
-    if (!topic || questions.length === 0) return;
-    if (questions.some((question) => !question.question.trim() || !question.answer.trim())) {
+    const questionsToSave = questions.filter((question) => !savedGeneratedQuestionIds[question.draftId]);
+    if (!topic || questionsToSave.length === 0) return;
+    if (questionsToSave.some((question) => !question.question.trim() || !question.answer.trim())) {
       setError("Each generated question needs both a question and an answer before saving.");
       return;
     }
@@ -1044,10 +1046,10 @@ function AdminWorkspace() {
     setAiLoadingMessage(aiLoadingMessages[0]);
     setAiLoading(true);
     try {
-      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}/questions/bulk`, {
+      await request("/api/admin/topics/" + encodeURIComponent(topic.slug) + "/questions/bulk", {
         method: "POST",
         body: JSON.stringify({
-          questions: questions.map((question, index) => ({
+          questions: questionsToSave.map((question, index) => ({
             question: question.question.trim(),
             answer: question.answer.trim(),
             example: question.example.trim() || null,
@@ -1061,12 +1063,15 @@ function AdminWorkspace() {
           })),
         }),
       });
-      setGeneratedQuestions([]);
-      setMergedQuestion(null);
-      setSelectedGeneratedIndexes([]);
-      setIsAiPanelOpen(false);
-      await loadTopic(topic.slug);
-      setNotice(`${questions.length} initial question${questions.length === 1 ? "" : "s"} created`);
+      setSavedGeneratedQuestionIds((current) => ({
+        ...current,
+        ...Object.fromEntries(questionsToSave.map((question) => [question.draftId, true])),
+      }));
+      setSelectedGeneratedIndexes((current) => current.filter((index) =>
+        !questionsToSave.some((question) => generatedQuestions[index]?.draftId === question.draftId),
+      ));
+      await loadTopic(topic.slug, selectedDifficulty, true);
+      setNotice(questionsToSave.length + " question" + (questionsToSave.length === 1 ? "" : "s") + " saved");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1085,7 +1090,9 @@ function AdminWorkspace() {
   };
 
   const updateAllGeneratedQuestionStatuses = (status: QuestionStatus) => {
-    setGeneratedQuestions((current) => current.map((item) => ({ ...item, status })));
+    setGeneratedQuestions((current) => current.map((item) =>
+      savedGeneratedQuestionIds[item.draftId] ? item : { ...item, status },
+    ));
   };
 
   const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
@@ -1171,12 +1178,11 @@ function AdminWorkspace() {
           displayOrder: editingExistingQuestion ? selectedQuestion.displayOrder : siblingOrder,
         }),
       });
-      const removedIndex = generatedQuestions.findIndex((item) => item.draftId === draft.draftId);
-      setGeneratedQuestions((current) => current.filter((item) => item.draftId !== draft.draftId));
+      const savedIndex = generatedQuestions.findIndex((item) => item.draftId === draft.draftId);
+      setSavedGeneratedQuestionIds((current) => ({ ...current, [draft.draftId]: true }));
       setSelectedGeneratedIndexes((current) => current
-        .filter((index) => index !== removedIndex)
-        .map((index) => index > removedIndex ? index - 1 : index));
-      await loadTopic(topic.slug);
+        .filter((index) => index !== savedIndex));
+      await loadTopic(topic.slug, selectedDifficulty, true);
       setNotice(editingExistingQuestion ? "Question updated" : "Question saved");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1186,7 +1192,12 @@ function AdminWorkspace() {
   };
 
   const removeGeneratedQuestion = (index: number) => {
+    const draftId = generatedQuestions[index]?.draftId;
     setGeneratedQuestions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    if (draftId) setSavedGeneratedQuestionIds((current) => {
+      const { [draftId]: _saved, ...remaining } = current;
+      return remaining;
+    });
     setSelectedGeneratedIndexes((current) => current
       .filter((selectedIndex) => selectedIndex !== index)
       .map((selectedIndex) => selectedIndex > index ? selectedIndex - 1 : selectedIndex));
@@ -1204,6 +1215,7 @@ function AdminWorkspace() {
 
   const discardGeneratedQuestions = () => {
     setGeneratedQuestions([]);
+    setSavedGeneratedQuestionIds({});
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
   };
@@ -1226,28 +1238,18 @@ function AdminWorkspace() {
     }
   };
 
-  const moveQuestion = async (questionId: number, direction: -1 | 1) => {
+  const persistQuestionOrder = async (siblings: Question[], reorderedSiblings: Question[]) => {
     if (!topic) return;
-    const question = questionById.get(questionId);
-    if (!question) return;
-    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
-    const currentIndex = siblings.findIndex((item) => item.id === questionId);
-    const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
-
-    const reorderedSiblings = [...siblings];
-    const [movedQuestion] = reorderedSiblings.splice(currentIndex, 1);
-    reorderedSiblings.splice(targetIndex, 0, movedQuestion);
-    const siblingIds = new Set(siblings.map((item) => item.id));
+    const siblingIds = new Set(siblings.map((question) => question.id));
     const reorderedQuestionIds = [
-      ...reorderedSiblings.map((item) => item.id),
-      ...orderedQuestions.filter((item) => !siblingIds.has(item.id)).map((item) => item.id),
+      ...reorderedSiblings.map((question) => question.id),
+      ...orderedQuestions.filter((question) => !siblingIds.has(question.id)).map((question) => question.id),
     ];
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}/questions/order`, {
+      await request("/api/admin/topics/" + encodeURIComponent(topic.slug) + "/questions/order", {
         method: "PUT",
         body: JSON.stringify({ questionIds: reorderedQuestionIds }),
       });
@@ -1258,6 +1260,38 @@ function AdminWorkspace() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const moveQuestion = async (questionId: number, direction: -1 | 1) => {
+    const question = questionById.get(questionId);
+    if (!question) return;
+    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
+    const currentIndex = siblings.findIndex((item) => item.id === questionId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
+
+    const reorderedSiblings = [...siblings];
+    const [movedQuestion] = reorderedSiblings.splice(currentIndex, 1);
+    reorderedSiblings.splice(targetIndex, 0, movedQuestion);
+    await persistQuestionOrder(siblings, reorderedSiblings);
+  };
+
+  const reorderQuestion = async (questionId: number, targetQuestionId: number, placement: "before" | "after") => {
+    if (questionId === targetQuestionId) return;
+    const question = questionById.get(questionId);
+    const targetQuestion = questionById.get(targetQuestionId);
+    if (!question || !targetQuestion || question.parentQuestionId !== targetQuestion.parentQuestionId) return;
+
+    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
+    const remainingSiblings = siblings.filter((item) => item.id !== questionId);
+    const targetIndex = remainingSiblings.findIndex((item) => item.id === targetQuestionId);
+    if (targetIndex < 0) return;
+
+    const insertionIndex = placement === "before" ? targetIndex : targetIndex + 1;
+    const reorderedSiblings = [...remainingSiblings];
+    reorderedSiblings.splice(insertionIndex, 0, question);
+    if (reorderedSiblings.every((item, index) => item.id === siblings[index]?.id)) return;
+    await persistQuestionOrder(siblings, reorderedSiblings);
   };
 
   const moveCategory = async (categoryId: number, direction: -1 | 1) => {
@@ -1685,8 +1719,6 @@ function AdminWorkspace() {
                   questions={orderedQuestions}
                   rootQuestions={rootQuestions}
                   selectedQuestionId={selectedQuestionId}
-                  selectedSiblingIndex={selectedSiblingIndex}
-                  selectedSiblingCount={selectedSiblings.length}
                   expandedQuestions={expandedQuestions}
                   revealedAnswers={revealedAnswers}
                   revealedExamples={revealedExamples}
@@ -1714,12 +1746,12 @@ function AdminWorkspace() {
                   onToggleCodeSnippet={(id) => setRevealedCodeSnippets((current) => ({ ...current, [id]: !current[id] }))}
                   onToggleTags={(id) => setRevealedTags((current) => ({ ...current, [id]: !current[id] }))}
                   onMove={moveQuestion}
+                  onReorder={reorderQuestion}
                   onEdit={openQuestionEditor}
                   onImprove={improveQuestionWithAi}
                   onAddFollowUp={startQuestionCreation}
                   onGenerateFollowUps={() => focusAiGeneration("follow-up")}
                   onGenerateDetails={prepareDetailsGeneration}
-                  onDelete={(question, childCount) => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount })}
                 />
                   {!rootQuestions.some(hasVisibleQuestion) && (
                     <p className="muted">{topic.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
@@ -1859,6 +1891,20 @@ function AdminWorkspace() {
                     </button>}
                     <button type="button" onClick={cancelQuestionForm}>Cancel</button>
                   </div>
+                  {editingQuestionId !== null && selectedQuestion && !isDetailsGeneration && (
+                    <section className="danger-zone" aria-labelledby="delete-question-heading">
+                      <div>
+                        <h4 id="delete-question-heading">Danger zone</h4>
+                        <p>Delete this question and any follow-ups permanently.</p>
+                      </div>
+                      <button className="danger" type="button" onClick={() => setDeleteConfirmation({
+                        type: "question",
+                        id: selectedQuestion.id,
+                        title: selectedQuestion.question,
+                        childCount: descendantCount(selectedQuestion.id, orderedQuestions),
+                      })}>Delete question</button>
+                    </section>
+                  )}
                   </form>
                 )}
               </div>
@@ -1953,7 +1999,7 @@ function AdminWorkspace() {
                       <div className="ai-field question-count-field">
                         <span className="ai-field-label">Number of questions</span>
                         <div className="question-count-control">
-                          <button type="button" aria-label="Generate one fewer question" disabled={aiCount <= 1} onClick={() => { setAiCount((current) => current - 1); setAiGenerateAlternatives(false); }}>−</button>
+                          <button type="button" aria-label="Generate one fewer question" onClick={() => { setAiCount((current) => current <= 1 ? maxBatchQuestionCount : current - 1); setAiGenerateAlternatives(false); }}>−</button>
                           <input type="number" min={1} max={maxBatchQuestionCount} aria-label="Number of questions" value={aiCount} onChange={(event) => { const nextCount = Number(event.target.value); setAiCount(nextCount); if (nextCount !== 1) setAiGenerateAlternatives(false); }} />
                           <button type="button" aria-label="Generate one more question" disabled={aiCount >= maxBatchQuestionCount} onClick={() => { setAiCount((current) => current + 1); setAiGenerateAlternatives(false); }}>+</button>
                         </div>
@@ -1993,7 +2039,7 @@ function AdminWorkspace() {
                 {generatedQuestions.length > 0 && (
                   <div className="generated-questions">
                     <div className="generated-heading">
-                      <h4>Generated questions</h4>
+                      <h4>Generated questions · {unsavedGeneratedQuestions.length} remaining</h4>
                       {aiUsage?.totalTokens !== undefined && (
                         <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
                       )}
@@ -2029,7 +2075,11 @@ function AdminWorkspace() {
                     </div>
                     {generatedQuestions.map((generated, index) => (
                       <article
-                        className={`generated-question${improvingAnswers[generated.draftId] ? " generated-question-improving" : ""}`}
+                        className={[
+                          "generated-question",
+                          improvingAnswers[generated.draftId] ? "generated-question-improving" : "",
+                          savedGeneratedQuestionIds[generated.draftId] ? "generated-question-saved" : "",
+                        ].filter(Boolean).join(" ")}
                         key={generated.draftId}
                         aria-busy={Boolean(improvingAnswers[generated.draftId])}
                       >
@@ -2037,14 +2087,16 @@ function AdminWorkspace() {
                           <input
                             type="checkbox"
                             checked={selectedGeneratedIndexes.includes(index)}
+                            disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])}
                             onChange={() => toggleGeneratedQuestion(index)}
                           />
-                          <span className="eyebrow">Option {index + 1}</span>
+                          <span className="eyebrow">Question {index + 1}</span>
+                          {savedGeneratedQuestionIds[generated.draftId] && <span className="saved-generated-question">Saved</span>}
                         </label>
                         {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Question</span>
-                            <input value={generated.question} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
+                            <input value={generated.question} disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
                           </label>
                         ) : <strong>{generated.question}</strong>}
                         <span className="candidate-meta">{generated.difficulty} · {generated.type} · {aiGenerationMode === "follow-up" && selectedQuestion ? `Level ${selectedQuestion.depth + 1}` : "Main question · Level 0"} · AI-assisted by {generated.generation.provider} ({generated.generation.model})</span>
@@ -2052,33 +2104,34 @@ function AdminWorkspace() {
                           compact
                           value={generated.status}
                           onChange={(status) => updateGeneratedQuestionStatus(generated.draftId, status)}
-                          name={`generated-question-status-${generated.draftId}`}
+                          name={"generated-question-status-" + generated.draftId}
+                          disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])}
                         />
                         {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Answer</span>
-                            <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
+                            <textarea rows={5} value={generated.answer} disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
                         {isMultipleQuestionGeneration ? <>
                           <label className="generated-edit-field">
                             <span>Example</span>
-                            <textarea rows={4} value={generated.example} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
+                            <textarea rows={4} value={generated.example} disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
                           </label>
                           <label className="generated-edit-field">
                             <span>Code snippet</span>
-                            <textarea rows={4} value={generated.codeSnippet} onChange={(event) => updateGeneratedQuestion(index, "codeSnippet", event.target.value)} />
+                            <textarea rows={4} value={generated.codeSnippet} disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])} onChange={(event) => updateGeneratedQuestion(index, "codeSnippet", event.target.value)} />
                           </label>
                           <label className="generated-edit-field">
                             <span>Tags</span>
-                            <input value={generated.tags.join(", ")} onChange={(event) => updateGeneratedQuestion(index, "tags", event.target.value)} />
+                            <input value={generated.tags.join(", ")} disabled={Boolean(savedGeneratedQuestionIds[generated.draftId])} onChange={(event) => updateGeneratedQuestion(index, "tags", event.target.value)} />
                           </label>
                         </> : <>
                           <p><strong>Example:</strong> {generated.example}</p>
                           <p><strong>Tags:</strong> {generated.tags.join(", ")}</p>
                           {generated.codeSnippet && <pre><code>{generated.codeSnippet}</code></pre>}
                         </>}
-                        {aiGenerationMode === "follow-up" && editingQuestionId === null && (
+                        {!savedGeneratedQuestionIds[generated.draftId] && aiGenerationMode === "follow-up" && editingQuestionId === null && (
                           <div className="answer-improvement">
                             <label className="answer-improvement-label">
                               <span>
@@ -2130,12 +2183,12 @@ function AdminWorkspace() {
                           <button
                             type="button"
                             className="primary candidate-save-action"
-                            disabled={Boolean(savingGeneratedQuestions[generated.draftId])}
+                            disabled={Boolean(savedGeneratedQuestionIds[generated.draftId]) || Boolean(savingGeneratedQuestions[generated.draftId])}
                             onClick={() => void saveGeneratedQuestion(generated)}
                           >
-                            {savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
+                            {savedGeneratedQuestionIds[generated.draftId] ? "Saved" : savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
                           </button>
-                          {isMultipleQuestionGeneration && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
+                          {isMultipleQuestionGeneration && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>{savedGeneratedQuestionIds[generated.draftId] ? "Hide" : "Remove"}</button>}
                         </div>
                       </article>
                     ))}
@@ -2160,10 +2213,10 @@ function AdminWorkspace() {
                         <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length === 0} onClick={saveSelectedGeneratedQuestions}>
                           {aiLoading ? "Saving..." : `Save selected (${selectedGeneratedIndexes.length})`}
                         </button>
-                        <button className="primary" type="button" disabled={isAiBusy} onClick={() => void saveGeneratedQuestions(generatedQuestions)}>
-                          {aiLoading ? "Saving..." : `Save all (${generatedQuestions.length})`}
+                        <button className="primary" type="button" disabled={isAiBusy || unsavedGeneratedQuestions.length === 0} onClick={() => void saveGeneratedQuestions(unsavedGeneratedQuestions)}>
+                          {aiLoading ? "Saving..." : "Save all (" + unsavedGeneratedQuestions.length + ")"}
                         </button>
-                        <button type="button" disabled={isAiBusy} onClick={discardGeneratedQuestions}>Discard</button>
+                        <button type="button" disabled={isAiBusy} onClick={discardGeneratedQuestions}>{unsavedGeneratedQuestions.length === 0 ? "Clear results" : "Discard results"}</button>
                       </> : <>
                         <button type="button" onClick={mergeSelectedQuestions} disabled={isAiBusy || selectedGeneratedIndexes.length !== 2}>
                           {aiLoading ? "Merging..." : "Merge selected"}
