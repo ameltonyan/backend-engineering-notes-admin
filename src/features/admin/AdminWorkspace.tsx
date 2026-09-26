@@ -1079,6 +1079,10 @@ function AdminWorkspace() {
     setGeneratedQuestions((current) => current.map((item) => item.draftId === draftId ? { ...item, status } : item));
   };
 
+  const updateAllGeneratedQuestionStatuses = (status: QuestionStatus) => {
+    setGeneratedQuestions((current) => current.map((item) => ({ ...item, status })));
+  };
+
   const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
     setAnswerImprovements((current) => {
       const existing = current[draftId];
@@ -1980,6 +1984,34 @@ function AdminWorkspace() {
                       )}
                     </div>
                     <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
+                    <div className="generated-bulk-actions" role="group" aria-label="Bulk publishing status">
+                      <span>Bulk publishing status</span>
+                      <button
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "DRAFT")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("DRAFT")}
+                      >
+                        Mark all draft
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "REVIEWED")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("REVIEWED")}
+                      >
+                        Mark all reviewed
+                      </button>
+                      <button
+                        className="primary"
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "PUBLISHED")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("PUBLISHED")}
+                      >
+                        Publish all
+                      </button>
+                    </div>
                     {generatedQuestions.map((generated, index) => (
                       <article
                         className={`generated-question${improvingAnswers[generated.draftId] ? " generated-question-improving" : ""}`}

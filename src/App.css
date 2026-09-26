@@ -1772,6 +1772,27 @@ select:disabled {
   gap: 12px;
 }
 
+.generated-bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--green);
+  background: #eff8f1;
+}
+
+.generated-bulk-actions>span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.generated-bulk-actions button {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
 .generated-question {
   display: grid;
   gap: 8px;
