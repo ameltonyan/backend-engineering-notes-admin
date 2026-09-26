@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { TopicSummary, Category } from "./types";
 import type { Difficulty } from "../questions/types";
 
@@ -14,6 +15,7 @@ type Props = {
   onDifficultyChange: (difficulty: Difficulty) => void;
   onSearchChange: (value: string) => void;
   onToggleCreateMenu: () => void;
+  onCloseCreateMenu: () => void;
   onNewTopic: () => void;
   onNewCategory: () => void;
   onNewTopicPlan: () => void;
@@ -28,14 +30,29 @@ type Props = {
 function ContentLibrary({
   topics, categories, topicsByCategory, selectedSlug, search, collapsedCategories, createMenuOpen, loading, difficulty,
   onDifficultyChange,
-  onSearchChange, onToggleCreateMenu, onNewTopic, onNewCategory, onNewTopicPlan, onOpenStudyProgram, onToggleCategory,
+  onSearchChange, onToggleCreateMenu, onCloseCreateMenu, onNewTopic, onNewCategory, onNewTopicPlan, onOpenStudyProgram, onToggleCategory,
   onSelectTopic, onMoveCategory, onMoveTopic, onOpenTopicPlan,
 }: Props) {
+  const createContentActionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+
+    const closeWhenClickingOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !createContentActionsRef.current?.contains(event.target)) {
+        onCloseCreateMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", closeWhenClickingOutside);
+    return () => document.removeEventListener("pointerdown", closeWhenClickingOutside);
+  }, [createMenuOpen, onCloseCreateMenu]);
+
   return (
     <aside className="topic-list">
       <div className="list-heading">
         <div className="content-list-title"><h2>Content library</h2><span className="list-count">{topics.length} {topics.length === 1 ? "topic" : "topics"}</span></div>
-        <div className="create-content-actions">
+        <div className="create-content-actions" ref={createContentActionsRef}>
           <button type="button" onClick={onToggleCreateMenu} disabled={loading}>New content</button>
           {createMenuOpen && <div className="create-content-menu" role="menu">
             <button type="button" role="menuitem" onClick={onNewCategory}><strong>New category</strong><span>Organize topics in a category</span></button>

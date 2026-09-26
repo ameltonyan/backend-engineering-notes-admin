@@ -1379,6 +1379,7 @@ function AdminWorkspace() {
           }}
           onSearchChange={setTopicSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
+          onCloseCreateMenu={() => setIsCreateMenuOpen(false)}
           onNewTopic={openNewTopic}
           onNewCategory={() => { setIsCreateMenuOpen(false); setCategoryDialogSource("menu"); }}
           onNewTopicPlan={() => { setIsCreateMenuOpen(false); openNewTopicPlan(); }}
