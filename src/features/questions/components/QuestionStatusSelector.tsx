@@ -6,6 +6,7 @@ type QuestionStatusSelectorProps = {
   onChange: (status: QuestionStatus) => void;
   name: string;
   compact?: boolean;
+  disabled?: boolean;
 };
 
 export default function QuestionStatusSelector({
@@ -13,6 +14,7 @@ export default function QuestionStatusSelector({
   onChange,
   name,
   compact = false,
+  disabled = false,
 }: QuestionStatusSelectorProps) {
   return (
     <fieldset className={`question-status-selector${compact ? " question-status-selector-compact" : ""}`}>
@@ -20,7 +22,7 @@ export default function QuestionStatusSelector({
       <div className="question-status-options">
         {QUESTION_STATUS_OPTIONS.map((status) => (
           <label className={`question-status-option${value === status.value ? " selected" : ""}`} key={status.value}>
-            <input type="radio" name={name} value={status.value} checked={value === status.value} onChange={() => onChange(status.value)} />
+            <input type="radio" name={name} value={status.value} checked={value === status.value} disabled={disabled} onChange={() => onChange(status.value)} />
             <span>{status.label}</span>
             {!compact && <small>{status.description}</small>}
           </label>

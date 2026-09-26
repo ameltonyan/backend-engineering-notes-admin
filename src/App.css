@@ -1988,6 +1988,21 @@ select:disabled {
   background: #f4fbf5;
 }
 
+.generated-question-saved {
+  border-color: #8ebea0;
+  background: #f7fbf8;
+}
+
+.saved-generated-question {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid #8ebea0;
+  border-radius: 999px;
+  color: var(--green-dark);
+  font: 11px 'DM Mono', monospace;
+  font-weight: 600;
+}
+
 .answer-improvement-label {
   display: grid;
   gap: 6px;
