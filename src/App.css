@@ -539,7 +539,7 @@ select:disabled {
 
 .topbar {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding-bottom: 32px;
@@ -548,7 +548,7 @@ select:disabled {
 
 .topbar-actions {
   display: flex;
-  align-items: end;
+  align-items: center;
   gap: 12px;
 }
 
@@ -568,6 +568,106 @@ select:disabled {
   font: 14px 'Space Grotesk', sans-serif;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.ai-settings {
+  position: relative;
+}
+
+.ai-settings-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  white-space: nowrap;
+}
+
+.ai-settings-gear {
+  color: var(--green-dark);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ai-settings-popover {
+  display: grid;
+  gap: 4px;
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 36px));
+  padding: 16px;
+  border: 1px solid #afcdb8;
+  box-shadow: 6px 6px 0 rgba(7, 88, 67, .14);
+  background: var(--panel);
+}
+
+.ai-settings-popover-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ai-settings-popover-heading .eyebrow {
+  margin: 0 0 2px;
+}
+
+.ai-settings-close {
+  min-width: 32px;
+  padding: 2px 8px;
+  border: 0;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ai-settings-field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font: 11px 'DM Mono', monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.ai-settings-field input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  font: 14px 'Space Grotesk', sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ai-settings-save {
+  margin-top: 8px;
+  padding: 9px 10px;
+}
+
+.ai-settings-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ai-settings-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-settings-links a {
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .workspace {
