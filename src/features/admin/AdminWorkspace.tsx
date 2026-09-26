@@ -9,7 +9,7 @@ import CategoryCreateDialog from "../content/CategoryCreateDialog";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
-import { questionPreview } from "../questions/questionUtils";
+import { descendantCount, questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
@@ -265,12 +265,6 @@ function AdminWorkspace() {
   const questionById = new Map(orderedQuestions.map((question) => [question.id, question]));
   const selectedQuestion = selectedQuestionId ? questionById.get(selectedQuestionId) : undefined;
   const isDetailsGeneration = detailsGenerationTargetId !== null && detailsGenerationTargetId === editingQuestionId;
-  const selectedSiblings = selectedQuestion
-    ? orderedQuestions.filter((question) => question.parentQuestionId === selectedQuestion.parentQuestionId)
-    : [];
-  const selectedSiblingIndex = selectedQuestion
-    ? selectedSiblings.findIndex((question) => question.id === selectedQuestion.id)
-    : -1;
   const matchesQuestionFilters = (question: Question) =>
     (questionStatusFilter === "ALL" || question.status === questionStatusFilter)
     && (!normalizedQuestionSearch || [question.question, question.answer].some((value) =>
@@ -1703,8 +1697,6 @@ function AdminWorkspace() {
                   questions={orderedQuestions}
                   rootQuestions={rootQuestions}
                   selectedQuestionId={selectedQuestionId}
-                  selectedSiblingIndex={selectedSiblingIndex}
-                  selectedSiblingCount={selectedSiblings.length}
                   expandedQuestions={expandedQuestions}
                   revealedAnswers={revealedAnswers}
                   revealedExamples={revealedExamples}
@@ -1737,7 +1729,6 @@ function AdminWorkspace() {
                   onAddFollowUp={startQuestionCreation}
                   onGenerateFollowUps={() => focusAiGeneration("follow-up")}
                   onGenerateDetails={prepareDetailsGeneration}
-                  onDelete={(question, childCount) => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount })}
                 />
                   {!rootQuestions.some(hasVisibleQuestion) && (
                     <p className="muted">{topic.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
@@ -1877,6 +1868,20 @@ function AdminWorkspace() {
                     </button>}
                     <button type="button" onClick={cancelQuestionForm}>Cancel</button>
                   </div>
+                  {editingQuestionId !== null && selectedQuestion && !isDetailsGeneration && (
+                    <section className="danger-zone" aria-labelledby="delete-question-heading">
+                      <div>
+                        <h4 id="delete-question-heading">Danger zone</h4>
+                        <p>Delete this question and any follow-ups permanently.</p>
+                      </div>
+                      <button className="danger" type="button" onClick={() => setDeleteConfirmation({
+                        type: "question",
+                        id: selectedQuestion.id,
+                        title: selectedQuestion.question,
+                        childCount: descendantCount(selectedQuestion.id, orderedQuestions),
+                      })}>Delete question</button>
+                    </section>
+                  )}
                   </form>
                 )}
               </div>

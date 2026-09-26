@@ -1431,6 +1431,28 @@ select:disabled {
   font: 12px 'DM Mono', monospace;
 }
 
+.question-order-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding-right: 6px;
+}
+
+.question-order-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.question-order-button:disabled {
+  opacity: .45;
+}
+
 .tree-node-copy {
   display: grid;
   gap: 3px;
@@ -1596,64 +1618,31 @@ select:disabled {
   border-top: 1px solid var(--line);
 }
 
-.question-action-menu {
-  position: relative;
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid #e4bcbc;
+  background: #fff8f8;
 }
 
-.question-action-menu summary {
-  cursor: pointer;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--panel);
-  color: var(--ink);
-  font-weight: 500;
-  list-style: none;
+.danger-zone h4,
+.danger-zone p {
+  margin: 0;
 }
 
-.question-action-menu summary::-webkit-details-marker {
-  display: none;
+.danger-zone h4 {
+  color: var(--red);
+  font-size: 14px;
 }
 
-.question-action-menu summary::after {
-  margin-left: 7px;
-  content: "▾";
+.danger-zone p {
+  margin-top: 3px;
   color: var(--muted);
-}
-
-.question-action-menu[open] summary {
-  border-color: var(--green);
-  color: var(--green-dark);
-}
-
-.question-action-menu-items {
-  position: absolute;
-  z-index: 3;
-  display: grid;
-  min-width: 190px;
-  gap: 4px;
-  margin-top: 5px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--panel);
-  box-shadow: 0 8px 18px rgba(20, 48, 39, .14);
-}
-
-.question-action-menu:last-child .question-action-menu-items {
-  right: 0;
-}
-
-.question-action-menu-items button {
-  justify-content: flex-start;
-  width: 100%;
-  border: 0;
-  border-radius: 3px;
-  text-align: left;
-}
-
-.question-action-menu-items button:hover:not(:disabled) {
-  background: #eef8f0;
+  font-size: 13px;
 }
 
 .question-inspector {

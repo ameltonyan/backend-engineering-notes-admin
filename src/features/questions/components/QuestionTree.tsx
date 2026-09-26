@@ -1,13 +1,11 @@
 import type { Question } from "../../content/types";
 import type { ReactNode } from "react";
-import { descendantCount, questionKind } from "../questionUtils";
+import { questionKind } from "../questionUtils";
 
 type QuestionTreeProps = {
   questions: Question[];
   rootQuestions: Question[];
   selectedQuestionId: number | null;
-  selectedSiblingIndex: number;
-  selectedSiblingCount: number;
   expandedQuestions: Record<number, boolean>;
   revealedAnswers: Record<number, boolean>;
   revealedExamples: Record<number, boolean>;
@@ -28,15 +26,12 @@ type QuestionTreeProps = {
   onAddFollowUp: (parentId: number) => void;
   onGenerateFollowUps: () => void;
   onGenerateDetails: (question: Question) => void;
-  onDelete: (question: Question, childCount: number) => void;
 };
 
 export default function QuestionTree({
   questions,
   rootQuestions,
   selectedQuestionId,
-  selectedSiblingIndex,
-  selectedSiblingCount,
   expandedQuestions,
   revealedAnswers,
   revealedExamples,
@@ -57,24 +52,29 @@ export default function QuestionTree({
   onAddFollowUp,
   onGenerateFollowUps,
   onGenerateDetails,
-  onDelete,
 }: QuestionTreeProps) {
-  const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
+  const renderQuestionNode = (question: Question): ReactNode => {
     if (!isVisible(question)) return null;
 
     const children = questions.filter((candidate) => candidate.parentQuestionId === question.id);
+    const siblings = question.parentQuestionId === null
+      ? rootQuestions
+      : questions.filter((candidate) => candidate.parentQuestionId === question.parentQuestionId);
+    const siblingIndex = siblings.findIndex((candidate) => candidate.id === question.id);
     const isExpanded = expandedQuestions[question.id] !== false;
     const isSelected = selectedQuestionId === question.id;
-    const childNodes = children.map((child, index) => renderQuestionNode(child, index));
+    const childNodes = children.map(renderQuestionNode);
+    const canMoveUp = siblingIndex > 0;
+    const canMoveDown = siblingIndex >= 0 && siblingIndex < siblings.length - 1;
 
     return (
-      <article id={`question-node-${question.id}`} className={`tree-node depth-${Math.min(question.depth, 5)}${isSelected ? " selected" : ""}`} key={question.id}>
+      <article id={"question-node-" + question.id} className={["tree-node", "depth-" + Math.min(question.depth, 5), isSelected ? "selected" : ""].filter(Boolean).join(" ")} key={question.id}>
         <div className="tree-node-row">
           <button
             className="tree-node-toggle"
             type="button"
             aria-expanded={children.length ? isExpanded : undefined}
-            aria-label={`Select ${question.question}`}
+            aria-label={"Select " + question.question}
             onClick={() => {
               if (isSelected) {
                 onDeselect();
@@ -84,23 +84,27 @@ export default function QuestionTree({
             }}
           >
             <span className="tree-branch" aria-hidden="true">{children.length ? (isExpanded ? "▾" : "▸") : "·"}</span>
-            {question.depth === 0 && <span className="question-number" aria-label={`Main question ${siblingIndex + 1}`}>{siblingIndex + 1}</span>}
+            <span className="question-number" title={"Position " + (siblingIndex + 1) + " of " + siblings.length}>{siblingIndex + 1}</span>
             <span className="tree-node-copy">
               <strong>{question.question}</strong>
               <span className="tree-meta">
-                {questionKind(question.depth)} <span className={`question-status-indicator status-${question.status.toLowerCase()}`} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
+                {questionKind(question.depth)} <span className={["question-status-indicator", "status-" + question.status.toLowerCase()].join(" ")} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
               </span>
             </span>
           </button>
+          <div className="question-order-controls" aria-label={"Order for " + question.question}>
+            <button className="question-order-button" type="button" title={canMoveUp ? "Move up" : "Already first in this group"} aria-label="Move question up" disabled={!canMoveUp} onClick={() => onMove(question.id, -1)}>↑</button>
+            <button className="question-order-button" type="button" title={canMoveDown ? "Move down" : "Already last in this group"} aria-label="Move question down" disabled={!canMoveDown} onClick={() => onMove(question.id, 1)}>↓</button>
+          </div>
         </div>
         {isSelected && (
-          <section className="selected-question-card" aria-label={`Selected ${questionKind(question.depth).toLowerCase()}`}>
+          <section className="selected-question-card" aria-label={"Selected " + questionKind(question.depth).toLowerCase()}>
             <div className="selected-question-context">
               <span>{questionKind(question.depth)} · Level {question.depth}</span>
-              <span>Order {question.displayOrder + 1} of {selectedSiblingCount}</span>
-              <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
+              <span>Order {siblingIndex + 1} of {siblings.length}</span>
+              <span className={["question-status-badge", "status-" + question.status.toLowerCase()].join(" ")}>{question.status.toLowerCase()}</span>
               {question.aiGeneration && (
-                <span title={`Generation run ${question.aiGeneration.generationRunId}`}>
+                <span title={"Generation run " + question.aiGeneration.generationRunId}>
                   AI-assisted by {question.aiGeneration.provider} ({question.aiGeneration.model})
                 </span>
               )}
@@ -126,24 +130,11 @@ export default function QuestionTree({
             <div className="selected-question-actions" aria-label="Question actions">
               <button type="button" title="Edit question" onClick={() => onEdit(question)}>Edit</button>
               <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => onImprove(question)}>Improve with AI</button>
+              <button type="button" disabled={isAiBusy} onClick={onGenerateFollowUps}>Generate follow-ups</button>
+              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => onGenerateDetails(question)}>
+                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
+              </button>
               <button type="button" title="Add a follow-up question" onClick={() => onAddFollowUp(question.id)}>+ Follow-up</button>
-              <details className="question-action-menu">
-                <summary>AI actions</summary>
-                <div className="question-action-menu-items">
-                  <button type="button" disabled={isAiBusy} onClick={onGenerateFollowUps}>Generate follow-ups</button>
-                  <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => onGenerateDetails(question)}>
-                    {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
-                  </button>
-                </div>
-              </details>
-              <details className="question-action-menu">
-                <summary>More</summary>
-                <div className="question-action-menu-items">
-                  <button type="button" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => onMove(question.id, -1)}>Move up</button>
-                  <button type="button" title={selectedSiblingIndex < selectedSiblingCount - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblingCount - 1} onClick={() => onMove(question.id, 1)}>Move down</button>
-                  <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => onDelete(question, descendantCount(question.id, questions))}>Delete</button>
-                </div>
-              </details>
             </div>
           </section>
         )}
@@ -152,5 +143,5 @@ export default function QuestionTree({
     );
   };
 
-  return <div className="question-tree" aria-label="Interview question hierarchy">{rootQuestions.map((question, index) => renderQuestionNode(question, index))}</div>;
+  return <div className="question-tree" aria-label="Interview question hierarchy">{rootQuestions.map(renderQuestionNode)}</div>;
 }
