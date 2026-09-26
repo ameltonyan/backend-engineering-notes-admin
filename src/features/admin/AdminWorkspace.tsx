@@ -1238,28 +1238,18 @@ function AdminWorkspace() {
     }
   };
 
-  const moveQuestion = async (questionId: number, direction: -1 | 1) => {
+  const persistQuestionOrder = async (siblings: Question[], reorderedSiblings: Question[]) => {
     if (!topic) return;
-    const question = questionById.get(questionId);
-    if (!question) return;
-    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
-    const currentIndex = siblings.findIndex((item) => item.id === questionId);
-    const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
-
-    const reorderedSiblings = [...siblings];
-    const [movedQuestion] = reorderedSiblings.splice(currentIndex, 1);
-    reorderedSiblings.splice(targetIndex, 0, movedQuestion);
-    const siblingIds = new Set(siblings.map((item) => item.id));
+    const siblingIds = new Set(siblings.map((question) => question.id));
     const reorderedQuestionIds = [
-      ...reorderedSiblings.map((item) => item.id),
-      ...orderedQuestions.filter((item) => !siblingIds.has(item.id)).map((item) => item.id),
+      ...reorderedSiblings.map((question) => question.id),
+      ...orderedQuestions.filter((question) => !siblingIds.has(question.id)).map((question) => question.id),
     ];
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}/questions/order`, {
+      await request("/api/admin/topics/" + encodeURIComponent(topic.slug) + "/questions/order", {
         method: "PUT",
         body: JSON.stringify({ questionIds: reorderedQuestionIds }),
       });
@@ -1270,6 +1260,38 @@ function AdminWorkspace() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const moveQuestion = async (questionId: number, direction: -1 | 1) => {
+    const question = questionById.get(questionId);
+    if (!question) return;
+    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
+    const currentIndex = siblings.findIndex((item) => item.id === questionId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
+
+    const reorderedSiblings = [...siblings];
+    const [movedQuestion] = reorderedSiblings.splice(currentIndex, 1);
+    reorderedSiblings.splice(targetIndex, 0, movedQuestion);
+    await persistQuestionOrder(siblings, reorderedSiblings);
+  };
+
+  const reorderQuestion = async (questionId: number, targetQuestionId: number, placement: "before" | "after") => {
+    if (questionId === targetQuestionId) return;
+    const question = questionById.get(questionId);
+    const targetQuestion = questionById.get(targetQuestionId);
+    if (!question || !targetQuestion || question.parentQuestionId !== targetQuestion.parentQuestionId) return;
+
+    const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
+    const remainingSiblings = siblings.filter((item) => item.id !== questionId);
+    const targetIndex = remainingSiblings.findIndex((item) => item.id === targetQuestionId);
+    if (targetIndex < 0) return;
+
+    const insertionIndex = placement === "before" ? targetIndex : targetIndex + 1;
+    const reorderedSiblings = [...remainingSiblings];
+    reorderedSiblings.splice(insertionIndex, 0, question);
+    if (reorderedSiblings.every((item, index) => item.id === siblings[index]?.id)) return;
+    await persistQuestionOrder(siblings, reorderedSiblings);
   };
 
   const moveCategory = async (categoryId: number, direction: -1 | 1) => {
@@ -1724,6 +1746,7 @@ function AdminWorkspace() {
                   onToggleCodeSnippet={(id) => setRevealedCodeSnippets((current) => ({ ...current, [id]: !current[id] }))}
                   onToggleTags={(id) => setRevealedTags((current) => ({ ...current, [id]: !current[id] }))}
                   onMove={moveQuestion}
+                  onReorder={reorderQuestion}
                   onEdit={openQuestionEditor}
                   onImprove={improveQuestionWithAi}
                   onAddFollowUp={startQuestionCreation}

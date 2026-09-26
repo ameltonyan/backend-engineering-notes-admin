@@ -1370,6 +1370,23 @@ select:disabled {
   margin: 0 0 4px;
 }
 
+.tree-node[draggable="true"] > .tree-node-row {
+  cursor: grab;
+}
+
+.tree-node[draggable="true"] > .tree-node-row:active {
+  cursor: grabbing;
+}
+
+.tree-node.dragging {
+  opacity: .5;
+}
+
+.tree-node.drop-target > .tree-node-row > .tree-node-toggle {
+  border-color: var(--green);
+  background: #f4fbf5;
+}
+
 .tree-node::before {
   content: '';
   position: absolute;

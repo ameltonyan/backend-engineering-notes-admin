@@ -1,5 +1,5 @@
 import type { Question } from "../../content/types";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { questionKind } from "../questionUtils";
 
 type QuestionTreeProps = {
@@ -21,6 +21,7 @@ type QuestionTreeProps = {
   onToggleCodeSnippet: (questionId: number) => void;
   onToggleTags: (questionId: number) => void;
   onMove: (questionId: number, direction: -1 | 1) => void;
+  onReorder: (questionId: number, targetQuestionId: number, placement: "before" | "after") => void;
   onEdit: (question: Question) => void;
   onImprove: (question: Question) => void;
   onAddFollowUp: (parentId: number) => void;
@@ -47,12 +48,14 @@ export default function QuestionTree({
   onToggleCodeSnippet,
   onToggleTags,
   onMove,
+  onReorder,
   onEdit,
   onImprove,
   onAddFollowUp,
   onGenerateFollowUps,
   onGenerateDetails,
 }: QuestionTreeProps) {
+  const [draggingQuestionId, setDraggingQuestionId] = useState<number | null>(null);
   const renderQuestionNode = (question: Question): ReactNode => {
     if (!isVisible(question)) return null;
 
@@ -66,9 +69,35 @@ export default function QuestionTree({
     const childNodes = children.map(renderQuestionNode);
     const canMoveUp = siblingIndex > 0;
     const canMoveDown = siblingIndex >= 0 && siblingIndex < siblings.length - 1;
+    const draggingQuestion = draggingQuestionId === null ? undefined : questions.find((candidate) => candidate.id === draggingQuestionId);
+    const canDropHere = Boolean(draggingQuestion && draggingQuestion.id !== question.id
+      && draggingQuestion.parentQuestionId === question.parentQuestionId);
 
     return (
-      <article id={"question-node-" + question.id} className={["tree-node", "depth-" + Math.min(question.depth, 5), isSelected ? "selected" : ""].filter(Boolean).join(" ")} key={question.id}>
+      <article
+        id={"question-node-" + question.id}
+        className={["tree-node", "depth-" + Math.min(question.depth, 5), isSelected ? "selected" : "", draggingQuestionId === question.id ? "dragging" : "", canDropHere ? "drop-target" : ""].filter(Boolean).join(" ")}
+        key={question.id}
+        draggable
+        onDragStart={(event) => {
+          setDraggingQuestionId(question.id);
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", String(question.id));
+        }}
+        onDragOver={(event) => {
+          if (!canDropHere) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          if (!canDropHere || draggingQuestionId === null) return;
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          onReorder(draggingQuestionId, question.id, event.clientY < bounds.top + bounds.height / 2 ? "before" : "after");
+          setDraggingQuestionId(null);
+        }}
+        onDragEnd={() => setDraggingQuestionId(null)}
+      >
         <div className="tree-node-row">
           <button
             className="tree-node-toggle"
