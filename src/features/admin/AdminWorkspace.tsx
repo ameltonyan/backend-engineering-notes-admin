@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import AiLoadingOverlay from "../../components/AiLoadingOverlay";
 import DeleteConfirmationDialog, { type DeleteConfirmation } from "../../components/DeleteConfirmationDialog";
 import StatusBanner from "../../components/StatusBanner";
 import LoginPage from "../auth/LoginPage";
 import { clearCredentials, readCredentials, saveCredentials } from "../auth/authStorage";
 import ContentLibrary from "../content/ContentLibrary";
-import { getPage, listPages, listSections } from "../content/contentApi";
+import CategoryCreateDialog from "../content/CategoryCreateDialog";
+import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
-import type { GeneratedPageProposal, Page, PageForm, PageSummary, Question, QuestionForm, QuestionStatus, Section } from "../content/types";
-import { descendantCount, questionKind, questionPreview } from "../questions/questionUtils";
+import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
+import { questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
@@ -20,7 +21,7 @@ import type { StudyProgramPayload, WeeklyStudyProgram } from "../study-programs/
 import { ApiRequestError, apiRequest as request } from "../../services/apiClient";
 import "../../App.css";
 
-const collapsedSectionsKey = "backend-engineering-notes-admin:collapsed-sections";
+const collapsedCategoriesKey = "backend-engineering-notes-admin:collapsed-categories";
 const difficultyStorageKey = "backend-engineering-notes-admin:difficulty";
 const maxBatchQuestionCount = 10;
 
@@ -52,7 +53,7 @@ const aiLoadingMessages = [
   "Checking that the answers sound spoken, not copied from a glossary.",
   "Reviewing failure modes, edge cases, and production consequences.",
   "Making sure the questions do not all wear the same disguise.",
-  "Comparing the new ideas with the questions already in this section.",
+  "Comparing the new ideas with the questions already in this category.",
   "Removing duplicate concepts before they reach your question tree.",
   "Asking the model to be specific, practical, and technically honest.",
   "Polishing the difference between knowing a term and reasoning about it.",
@@ -67,16 +68,16 @@ const parseTags = (value: string) => [...new Set(value.split(",")
   .map((tag) => tag.trim().toLowerCase().replace(/\s+/g, "-"))
   .filter(Boolean))].slice(0, 8);
 
-function readCollapsedSections(): Record<string, boolean> {
-  const stored = localStorage.getItem(collapsedSectionsKey);
+function readCollapsedCategories(): Record<string, boolean> {
+  const stored = localStorage.getItem(collapsedCategoriesKey);
   if (!stored) return {};
 
   try {
     const parsed = JSON.parse(stored) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(
-      Object.entries(parsed).filter(([section, collapsed]) =>
-        Boolean(section) && typeof collapsed === "boolean",
+      Object.entries(parsed).filter(([category, collapsed]) =>
+        Boolean(category) && typeof collapsed === "boolean",
       ),
     );
   } catch {
@@ -86,19 +87,20 @@ function readCollapsedSections(): Record<string, boolean> {
 
 function AdminWorkspace() {
   const [credentials, setCredentials] = useState(readCredentials);
-  const [pages, setPages] = useState<PageSummary[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
+  const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+  const [categoryDialogSource, setCategoryDialogSource] = useState<"menu" | "inline" | null>(null);
   const [selectedSlug, setSelectedSlug] = useState("");
-  const [page, setPage] = useState<Page | null>(null);
-  const [pageForm, setPageForm] = useState<PageForm>({
+  const [topic, setTopic] = useState<Topic | null>(null);
+  const [topicForm, setTopicForm] = useState<TopicForm>({
     slug: "",
     title: "",
     description: "",
-    section: "",
+    categoryId: null,
     displayOrder: 0,
   });
-  const [isPageFormOpen, setIsPageFormOpen] = useState(true);
+  const [isTopicFormOpen, setIsTopicFormOpen] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(readDifficulty);
   const [questionForm, setQuestionForm] = useState<QuestionForm>({
     question: "",
@@ -119,8 +121,8 @@ function AdminWorkspace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [slugWasEdited, setSlugWasEdited] = useState(false);
-  const [pageSearch, setPageSearch] = useState("");
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(readCollapsedSections);
+  const [topicSearch, setTopicSearch] = useState("");
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>(readCollapsedCategories);
   const [questionSearch, setQuestionSearch] = useState("");
   const [questionStatusFilter, setQuestionStatusFilter] = useState<QuestionStatus | "ALL">("ALL");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
@@ -131,11 +133,11 @@ function AdminWorkspace() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null);
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
   const [questionFieldError, setQuestionFieldError] = useState("");
-  const [pageFieldError, setPageFieldError] = useState("");
+  const [topicFieldError, setTopicFieldError] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
   const [aiIdea, setAiIdea] = useState("");
   const [aiType, setAiType] = useState<QuestionType>("INTERVIEW");
-  const [aiCount, setAiCount] = useState(3);
+  const [aiCount, setAiCount] = useState(1);
   const [aiGenerateAlternatives, setAiGenerateAlternatives] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<GeneratedQuestionDraft[]>([]);
   const [mergedQuestion, setMergedQuestion] = useState<GeneratedQuestionDraft | null>(null);
@@ -154,21 +156,21 @@ function AdminWorkspace() {
   const [detailsGenerationReady, setDetailsGenerationReady] = useState(false);
   const [aiGenerationMode, setAiGenerationMode] = useState<AiGenerationMode>("main");
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
-  const [isPagePlanOpen, setIsPagePlanOpen] = useState(false);
+  const [isTopicPlanOpen, setIsTopicPlanOpen] = useState(false);
   const [isStudyProgramOpen, setIsStudyProgramOpen] = useState(false);
   const [studyPrograms, setStudyPrograms] = useState<WeeklyStudyProgram[]>([]);
-  const [pagePlanSection, setPagePlanSection] = useState<Section | null>(null);
-  const [pagePlanSectionName, setPagePlanSectionName] = useState("");
-  const [pagePlanGuidance, setPagePlanGuidance] = useState("");
-  const [pagePlanTargetRole, setPagePlanTargetRole] = useState("Senior Backend Engineer");
-  const [pagePlanFocuses, setPagePlanFocuses] = useState<string[]>([
+  const [topicPlanCategory, setTopicPlanCategory] = useState<Category | null>(null);
+  const [topicPlanCategoryName, setTopicPlanCategoryName] = useState("");
+  const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
+  const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
+  const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
     "Core knowledge",
     "Internals",
   ]);
-  const [pagePlanPageCount, setPagePlanPageCount] = useState(10);
-  const [generatedPageProposals, setGeneratedPageProposals] = useState<GeneratedPageProposal[]>([]);
-  const [selectedPageProposalIndexes, setSelectedPageProposalIndexes] = useState<number[]>([]);
-  const [pagePlanLoading, setPagePlanLoading] = useState(false);
+  const [topicPlanTopicCount, setTopicPlanTopicCount] = useState(10);
+  const [generatedTopicProposals, setGeneratedTopicProposals] = useState<GeneratedTopicProposal[]>([]);
+  const [selectedTopicProposalIndexes, setSelectedTopicProposalIndexes] = useState<number[]>([]);
+  const [topicPlanLoading, setTopicPlanLoading] = useState(false);
   const [aiLoadingMessage, setAiLoadingMessage] = useState(aiLoadingMessages[0]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
@@ -176,7 +178,7 @@ function AdminWorkspace() {
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
-  const isAiBusy = aiLoading || pagePlanLoading;
+  const isAiBusy = aiLoading || topicPlanLoading;
   const createGeneratedDrafts = (questions: GeneratedQuestion[], generation: AiGenerationMetadata) => questions.map((question) => ({
     ...question,
     difficulty: selectedDifficulty,
@@ -203,8 +205,8 @@ function AdminWorkspace() {
   }, [notice]);
 
   useEffect(() => {
-    localStorage.setItem(collapsedSectionsKey, JSON.stringify(collapsedSections));
-  }, [collapsedSections]);
+    localStorage.setItem(collapsedCategoriesKey, JSON.stringify(collapsedCategories));
+  }, [collapsedCategories]);
 
   useEffect(() => {
     localStorage.setItem(difficultyStorageKey, selectedDifficulty);
@@ -227,40 +229,36 @@ function AdminWorkspace() {
     return () => window.removeEventListener("scroll", updateScrollTopVisibility);
   }, []);
 
-  const sectionSuggestions = Array.from(
-    new Set(sections.map((item) => item.name).filter(Boolean)),
-  ).sort();
-
-  const normalizedSearch = pageSearch.trim().toLowerCase();
-  const visiblePages = pages.filter((item) =>
-    [item.title, item.slug, item.section].some((value) =>
+  const normalizedSearch = topicSearch.trim().toLowerCase();
+  const visibleTopics = topics.filter((item) =>
+    [item.title, item.slug, item.category].some((value) =>
       value.toLowerCase().includes(normalizedSearch),
     ),
   );
 
-  const sectionOrder = new Map(
-    sections.map((section, index) => [section.name, section.displayOrder ?? index]),
+  const categoryOrder = new Map(
+    categories.map((category, index) => [category.name, category.displayOrder ?? index]),
   );
-  const pagesBySection = Array.from(
-    visiblePages.reduce((groups, item) => {
-      const section = item.section || "Other";
-      const sectionPages = groups.get(section) ?? [];
-      sectionPages.push(item);
-      groups.set(section, sectionPages);
+  const topicsByCategory = Array.from(
+    visibleTopics.reduce((groups, item) => {
+      const category = item.category || "Other";
+      const categoryTopics = groups.get(category) ?? [];
+      categoryTopics.push(item);
+      groups.set(category, categoryTopics);
       return groups;
-    }, new Map<string, PageSummary[]>()),
-  ).sort(([leftSection, leftPages], [rightSection, rightPages]) => {
+    }, new Map<string, TopicSummary[]>(normalizedSearch ? [] : categories.map((category) => [category.name, []]))),
+  ).sort(([leftCategory, leftTopics], [rightCategory, rightTopics]) => {
     const orderDifference =
-      (sectionOrder.get(leftSection) ?? leftPages[0]?.displayOrder ?? 0) -
-      (sectionOrder.get(rightSection) ?? rightPages[0]?.displayOrder ?? 0);
-    return orderDifference || leftSection.localeCompare(rightSection);
-  }).map(([section, sectionPages]) => [
-    section,
-    sectionPages.sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title)),
-  ] as [string, PageSummary[]]);
+      (categoryOrder.get(leftCategory) ?? leftTopics[0]?.displayOrder ?? 0) -
+      (categoryOrder.get(rightCategory) ?? rightTopics[0]?.displayOrder ?? 0);
+    return orderDifference || leftCategory.localeCompare(rightCategory);
+  }).map(([category, categoryTopics]) => [
+    category,
+    categoryTopics.sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title)),
+  ] as [string, TopicSummary[]]);
 
   const normalizedQuestionSearch = questionSearch.trim().toLowerCase();
-  const orderedQuestions = [...(page?.questions ?? [])].sort(
+  const orderedQuestions = [...(topic?.questions ?? [])].sort(
     (left, right) => left.depth - right.depth || left.displayOrder - right.displayOrder || left.id - right.id,
   );
   const questionById = new Map(orderedQuestions.map((question) => [question.id, question]));
@@ -282,20 +280,25 @@ function AdminWorkspace() {
       (child) => child.parentQuestionId === question.id && hasVisibleQuestion(child),
     );
   const rootQuestions = orderedQuestions.filter((question) => question.parentQuestionId === null);
+  const isAlternativeGeneration = aiGenerateAlternatives
+    && (aiGenerationMode === "follow-up" || (aiGenerationMode === "main" && aiCount === 1));
+  const isMultipleQuestionGeneration = aiGenerationMode === "main"
+    && generatedQuestions.length > 1
+    && !isAlternativeGeneration;
   const questionStatusCounts = QUESTION_STATUS_OPTIONS.reduce<Record<QuestionStatus | "ALL", number>>((counts, status) => {
     counts[status.value] = orderedQuestions.filter((question) => question.status === status.value).length;
     return counts;
   }, { ALL: orderedQuestions.length, DRAFT: 0, REVIEWED: 0, PUBLISHED: 0 });
 
-  const loadPages = async () => {
-    const list = await listPages();
-    setPages(list);
+  const loadTopics = async () => {
+    const list = await listTopics();
+    setTopics(list);
     return list;
   };
 
-  const loadSections = async () => {
-    const list = await listSections();
-    setSections(list);
+  const loadCategories = async () => {
+    const list = await listCategories();
+    setCategories(list);
     return list;
   };
 
@@ -306,7 +309,7 @@ function AdminWorkspace() {
   };
 
   const openStudyProgram = () => {
-    setIsCreateMenuOpen(false); setIsPagePlanOpen(false); setIsStudyProgramOpen(true); setPage(null);
+    setIsCreateMenuOpen(false); setIsTopicPlanOpen(false); setIsStudyProgramOpen(true); setTopic(null);
   };
 
   const saveStudyProgram = async (programId: number | null, payload: StudyProgramPayload) => {
@@ -317,38 +320,64 @@ function AdminWorkspace() {
     } catch (err) { setError(getErrorMessage(err)); } finally { setLoading(false); }
   };
 
-  const getOrCreateSection = async (name: string) => {
-    const existing = sections.find(
-      (section) => section.name.toLowerCase() === name.trim().toLowerCase(),
-    );
-    if (existing) return existing;
-
-    const created = (await request("/api/admin/sections", {
+  const createCategory = async (name: string, displayOrder: number) => {
+    const created = (await request("/api/admin/categories", {
       method: "POST",
-      body: JSON.stringify({ name: name.trim(), displayOrder: sections.length }),
-    })) as Section;
-    setSections((current) => [...current, created]);
-    return created;
+      body: JSON.stringify({ name, displayOrder }),
+    })) as Category;
+    await loadCategories();
+    if (categoryDialogSource === "inline") {
+      setTopicForm((current) => ({
+        ...current,
+        categoryId: created.id,
+        ...(!topic && !slugWasEdited ? { slug: generateSlug(created.name, current.title) } : {}),
+      }));
+    }
+    setCategoryDialogSource(null);
+    setNotice(`Category "${created.name}" created`);
   };
 
-  const loadPage = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
+  const getOrCreateCategory = async (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    const existing = categories.find((category) => category.name.toLowerCase() === normalizedName);
+    if (existing) return existing;
+
+    try {
+      const created = (await request("/api/admin/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim(), displayOrder: categories.length }),
+      })) as Category;
+      setCategories((current) => [...current, created]);
+      return created;
+    } catch (err) {
+      if (!(err instanceof ApiRequestError) || err.status !== 409) throw err;
+      const refreshedCategories = await loadCategories();
+      const concurrentCategory = refreshedCategories.find(
+        (category) => category.name.toLowerCase() === normalizedName,
+      );
+      if (concurrentCategory) return concurrentCategory;
+      throw err;
+    }
+  };
+
+  const loadTopic = useCallback(async (slug: string, difficulty: Difficulty = selectedDifficulty) => {
     setIsQuestionFormOpen(false);
     setEditingQuestionId(null);
     setIsAiPanelOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setSelectedQuestionId(null);
     setQuestionForm({ question: "", answer: "", example: "", codeSnippet: "", difficulty, status: "DRAFT", tags: [], aiGenerationRunId: null, parentQuestionId: null, displayOrder: 0 });
-    const loaded = await getPage(slug, difficulty);
-    setPage(loaded);
+    const loaded = await getTopic(slug, difficulty);
+    setTopic(loaded);
     setIsQuestionFormOpen(loaded.questions.length === 0);
-    setPageForm({
+    setTopicForm({
       slug: loaded.slug,
       title: loaded.title,
       description: loaded.description ?? "",
-      section: loaded.section,
+      categoryId: loaded.categoryId,
       displayOrder: loaded.displayOrder,
     });
-    setIsPageFormOpen(false);
+    setIsTopicFormOpen(false);
   }, [selectedDifficulty]);
 
   useEffect(() => {
@@ -356,18 +385,18 @@ function AdminWorkspace() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        const [loadedPages, loadedSections] = await Promise.all([loadPages(), loadSections(), loadStudyPrograms()]);
-        if (loadedPages.length) {
-          const sectionOrder = new Map(
-            loadedSections.map((section, index) => [section.name, section.displayOrder ?? index]),
+        const [loadedTopics, loadedCategories] = await Promise.all([loadTopics(), loadCategories(), loadStudyPrograms()]);
+        if (loadedTopics.length) {
+          const categoryOrder = new Map(
+            loadedCategories.map((category, index) => [category.name, category.displayOrder ?? index]),
           );
-          const firstPage = [...loadedPages].sort((left, right) => {
-            const sectionDifference =
-              (sectionOrder.get(left.section) ?? Number.MAX_SAFE_INTEGER) -
-              (sectionOrder.get(right.section) ?? Number.MAX_SAFE_INTEGER);
-            return sectionDifference || left.displayOrder - right.displayOrder || left.title.localeCompare(right.title);
+          const firstTopic = [...loadedTopics].sort((left, right) => {
+            const categoryDifference =
+              (categoryOrder.get(left.category) ?? Number.MAX_SAFE_INTEGER) -
+              (categoryOrder.get(right.category) ?? Number.MAX_SAFE_INTEGER);
+            return categoryDifference || left.displayOrder - right.displayOrder || left.title.localeCompare(right.title);
           })[0];
-          setSelectedSlug((current) => current || firstPage.slug);
+          setSelectedSlug((current) => current || firstTopic.slug);
         }
       } catch (err: unknown) {
         if (err instanceof ApiRequestError && (err.status === 401 || err.status === 403)) {
@@ -384,15 +413,15 @@ function AdminWorkspace() {
 
   useEffect(() => {
     if (!credentials || !selectedSlug) return;
-    const loadSelectedPage = async () => {
+    const loadSelectedTopic = async () => {
       try {
-        await loadPage(selectedSlug, selectedDifficulty);
+        await loadTopic(selectedSlug, selectedDifficulty);
       } catch (err: unknown) {
         setError(getErrorMessage(err));
       }
     };
-    void loadSelectedPage();
-  }, [credentials, selectedSlug, selectedDifficulty, loadPage]);
+    void loadSelectedTopic();
+  }, [credentials, selectedSlug, selectedDifficulty, loadTopic]);
 
   const startQuestionCreation = (parentId: number | null) => {
     if (parentId !== null && !questionById.has(parentId)) {
@@ -408,7 +437,7 @@ function AdminWorkspace() {
     setError("");
     setNotice("");
     setIsAiPanelOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
@@ -444,7 +473,7 @@ function AdminWorkspace() {
     setDetailsGenerationReady(false);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setQuestionForm({
       question: question.question,
       answer: question.answer,
@@ -464,7 +493,7 @@ function AdminWorkspace() {
     });
   };
 
-  const scrollToSection = (id: string) => {
+  const scrollToCategory = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -499,7 +528,7 @@ function AdminWorkspace() {
 
   const focusAiGeneration = (mode: AiGenerationMode = "main") => {
     setAiGenerationMode(mode);
-    setAiCount(mode === "batch-main" ? 10 : 1);
+    setAiCount(1);
     setAiGenerateAlternatives(false);
     setGeneratedQuestions([]);
     setMergedQuestion(null);
@@ -507,155 +536,150 @@ function AdminWorkspace() {
     setQuestionImprovement(defaultAnswerImprovement);
     setIsAiPanelOpen(true);
     setIsQuestionFormOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setEditingQuestionId(null);
     window.requestAnimationFrame(() => {
-      scrollToSection("ai-assist");
+      scrollToCategory("ai-assist");
       document.getElementById("ai-idea")?.focus();
     });
   };
 
-  const openPagePlan = (section: Section) => {
+  const openTopicPlan = (category: Category) => {
     setIsAiPanelOpen(false);
     setIsQuestionFormOpen(false);
-    setIsPagePlanOpen(true);
-    setPagePlanSection(section);
-    setPagePlanSectionName(section.name);
-    setPagePlanFocuses(["Core knowledge", "Internals"]);
-    setGeneratedPageProposals([]);
-    setSelectedPageProposalIndexes([]);
+    setIsTopicPlanOpen(true);
+    setTopicPlanCategory(category);
+    setTopicPlanCategoryName(category.name);
+    setTopicPlanFocuses(["Core knowledge", "Internals"]);
+    setGeneratedTopicProposals([]);
+    setSelectedTopicProposalIndexes([]);
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => {
-      document.getElementById("page-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  const closePagePlan = () => {
-    if (pagePlanLoading || loading) return;
-    setIsPagePlanOpen(false);
-    setPagePlanSection(null);
-    setPagePlanSectionName("");
-    setPagePlanGuidance("");
-    setGeneratedPageProposals([]);
-    setSelectedPageProposalIndexes([]);
+  const closeTopicPlan = () => {
+    if (topicPlanLoading || loading) return;
+    setIsTopicPlanOpen(false);
+    setTopicPlanCategory(null);
+    setTopicPlanCategoryName("");
+    setTopicPlanGuidance("");
+    setGeneratedTopicProposals([]);
+    setSelectedTopicProposalIndexes([]);
   };
 
-  const openNewPage = () => {
-    closePagePlan();
+  const openNewTopic = () => {
+    closeTopicPlan();
     setIsCreateMenuOpen(false);
-    setPage(null);
+    setTopic(null);
     setSelectedSlug("");
     setSlugWasEdited(false);
-    setPageForm({
+    setTopicForm({
       slug: "",
       title: "",
       description: "",
-      section: "",
-      displayOrder: pages.length,
+      categoryId: null,
+      displayOrder: topics.length,
     });
-    setIsPageFormOpen(true);
+    setIsTopicFormOpen(true);
   };
 
-  const openNewPagePlan = () => {
+  const openNewTopicPlan = () => {
     setIsAiPanelOpen(false);
     setIsQuestionFormOpen(false);
-    setIsPagePlanOpen(true);
-    setPagePlanSection(null);
-    setPage(null);
-    setPagePlanSectionName("");
-    setPagePlanFocuses(["Core knowledge", "Internals"]);
-    setGeneratedPageProposals([]);
-    setSelectedPageProposalIndexes([]);
+    setIsTopicPlanOpen(true);
+    setTopicPlanCategory(null);
+    setTopic(null);
+    setTopicPlanCategoryName("");
+    setTopicPlanGuidance("");
+    setTopicPlanFocuses(["Core knowledge", "Internals"]);
+    setGeneratedTopicProposals([]);
+    setSelectedTopicProposalIndexes([]);
     setError("");
     setNotice("");
     window.requestAnimationFrame(() => {
-      document.getElementById("page-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("page-plan-section-name")?.focus();
+      document.getElementById("topic-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("topic-plan-category-name")?.focus();
     });
   };
 
-  const generatePagePlan = async (event: FormEvent) => {
+  const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
-    const sectionName = pagePlanSectionName.trim();
-    const targetSectionName = pagePlanSection?.name ?? sectionName;
-    if (!sectionName) {
-      setError("Enter a section name for the page plan.");
+    const categoryName = topicPlanCategoryName.trim();
+    const targetCategoryName = topicPlanCategory?.name ?? categoryName;
+    if (!categoryName) {
+      setError("Enter a category name for the topic plan.");
       return;
     }
-    if (!pagePlanFocuses.length) {
+    if (!topicPlanFocuses.length) {
       setError("Select at least one interview focus.");
       return;
     }
     setError("");
     setAiLoadingMessage(aiLoadingMessages[0]);
-    setPagePlanLoading(true);
+    setTopicPlanLoading(true);
     try {
-      const result = (await request("/api/admin/ai/page-plans/generate", {
+      const result = (await request("/api/admin/ai/topic-plans/generate", {
         method: "POST",
         body: JSON.stringify({
-          sectionName,
-          targetRole: pagePlanTargetRole.trim(),
-          focuses: pagePlanFocuses,
-          pageCount: pagePlanPageCount,
-          additionalGuidance: pagePlanGuidance.trim() || null,
-          existingPageTitles: pages
-            .filter((item) => item.section.toLowerCase() === targetSectionName.toLowerCase())
+          categoryName,
+          targetRole: topicPlanTargetRole.trim(),
+          focuses: topicPlanFocuses,
+          topicCount: topicPlanTopicCount,
+          additionalGuidance: topicPlanGuidance.trim() || null,
+          existingTopicTitles: topics
+            .filter((item) => item.category.toLowerCase() === targetCategoryName.toLowerCase())
             .map((item) => item.title)
             .slice(0, 50),
         }),
-      }, undefined, 180_000)) as { pages: GeneratedPageProposal[]; usage?: AiUsage };
-      setGeneratedPageProposals(result.pages);
-      setSelectedPageProposalIndexes(result.pages.map((_, index) => index));
+      }, undefined, 180_000)) as { topics: GeneratedTopicProposal[]; usage?: AiUsage };
+      const proposals = result.topics;
+      setGeneratedTopicProposals(proposals);
+      setSelectedTopicProposalIndexes(proposals.map((_, index) => index));
       setAiUsage(result.usage ?? null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setPagePlanLoading(false);
+      setTopicPlanLoading(false);
     }
   };
 
-  const movePageProposal = (index: number, direction: -1 | 1) => {
+  const moveTopicProposal = (index: number, direction: -1 | 1) => {
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= generatedPageProposals.length) return;
-    setGeneratedPageProposals((current) => {
+    if (targetIndex < 0 || targetIndex >= generatedTopicProposals.length) return;
+    setGeneratedTopicProposals((current) => {
       const reordered = [...current];
       const [proposal] = reordered.splice(index, 1);
       reordered.splice(targetIndex, 0, proposal);
       return reordered;
     });
-    setSelectedPageProposalIndexes((current) => current.map((selectedIndex) => {
+    setSelectedTopicProposalIndexes((current) => current.map((selectedIndex) => {
       if (selectedIndex === index) return targetIndex;
       if (selectedIndex === targetIndex) return index;
       return selectedIndex;
     }));
   };
 
-  const removePageProposal = (index: number) => {
-    setGeneratedPageProposals((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
-    setSelectedPageProposalIndexes((current) => current
+  const removeTopicProposal = (index: number) => {
+    setGeneratedTopicProposals((current) => current.filter((_, candidateIndex) => candidateIndex !== index));
+    setSelectedTopicProposalIndexes((current) => current
       .filter((selectedIndex) => selectedIndex !== index)
       .map((selectedIndex) => selectedIndex > index ? selectedIndex - 1 : selectedIndex));
   };
 
-  const savePagePlan = async () => {
-    if (!pagePlanSectionName.trim() || !selectedPageProposalIndexes.length) return;
-    const selectedProposals = selectedPageProposalIndexes.map((index) => generatedPageProposals[index]);
-    const existingSlugs = new Set(pages.map((item) => item.slug));
+  const saveTopicPlan = async () => {
+    if (!topicPlanCategoryName.trim() || !selectedTopicProposalIndexes.length) return;
+    const selectedProposals = selectedTopicProposalIndexes.map((index) => generatedTopicProposals[index]);
+    const existingSlugs = new Set(topics.map((item) => item.slug));
     setLoading(true);
     setError("");
     try {
-      let section = pagePlanSection ?? await getOrCreateSection(pagePlanSectionName);
-      if (pagePlanSection && section.name.trim().toLowerCase() !== pagePlanSectionName.trim().toLowerCase()) {
-        section = (await request(`/api/admin/sections/${section.id}`, {
-          method: "PUT",
-          body: JSON.stringify({ name: pagePlanSectionName.trim() }),
-        })) as Section;
-        setSections((current) => current.map((item) => item.id === section.id ? section : item));
-      }
-      const sectionPageCount = pages.filter((item) => item.section === section.name).length;
+      const category = await getOrCreateCategory(topicPlanCategoryName);
+      const categoryTopicCount = topics.filter((item) => item.categoryId === category.id).length;
       for (const [index, proposal] of selectedProposals.entries()) {
-        const baseSlug = generateSlug(section.name, proposal.title);
+        const baseSlug = generateSlug(category.name, proposal.title);
         let slug = baseSlug;
         let suffix = 2;
         while (existingSlugs.has(slug)) {
@@ -663,25 +687,25 @@ function AdminWorkspace() {
           suffix += 1;
         }
         existingSlugs.add(slug);
-        await request("/api/admin/pages", {
+        await request("/api/admin/topics", {
           method: "POST",
           body: JSON.stringify({
             slug,
             title: proposal.title.trim(),
             description: proposal.description.trim() || null,
-            sectionId: section.id,
-            displayOrder: sectionPageCount + index,
+            categoryId: category.id,
+            displayOrder: categoryTopicCount + index,
           }),
         });
       }
-      await loadPages();
-      setNotice(`${selectedProposals.length} page${selectedProposals.length === 1 ? "" : "s"} created`);
-      setIsPagePlanOpen(false);
-      setPagePlanSection(null);
-      setPagePlanSectionName("");
-      setPagePlanGuidance("");
-      setGeneratedPageProposals([]);
-      setSelectedPageProposalIndexes([]);
+      await loadTopics();
+      setNotice(`${selectedProposals.length} topic${selectedProposals.length === 1 ? "" : "s"} created`);
+      setIsTopicPlanOpen(false);
+      setTopicPlanCategory(null);
+      setTopicPlanCategoryName("");
+      setTopicPlanGuidance("");
+      setGeneratedTopicProposals([]);
+      setSelectedTopicProposalIndexes([]);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -700,10 +724,10 @@ function AdminWorkspace() {
     setMergedQuestion(null);
     setSelectedGeneratedIndexes([]);
     setIsQuestionFormOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setIsAiPanelOpen(true);
     window.requestAnimationFrame(() => {
-      scrollToSection("ai-assist");
+      scrollToCategory("ai-assist");
       document.getElementById("ai-idea")?.focus();
     });
   };
@@ -760,120 +784,11 @@ function AdminWorkspace() {
     setDetailsGenerationReady(false);
   };
 
-  const renderQuestionNode = (question: Question, siblingIndex = 0): ReactNode => {
-    if (!hasVisibleQuestion(question)) return null;
-    const children = orderedQuestions.filter((candidate) => candidate.parentQuestionId === question.id);
-    const isExpanded = expandedQuestions[question.id] !== false;
-    const isSelected = selectedQuestionId === question.id;
-    const childNodes = children.map((child, index) => renderQuestionNode(child, index));
-
-    return (
-      <article id={`question-node-${question.id}`} className={`tree-node depth-${Math.min(question.depth, 5)}${isSelected ? " selected" : ""}`} key={question.id}>
-        <div className="tree-node-row">
-          <button
-            className="tree-node-toggle"
-            type="button"
-            aria-expanded={children.length ? isExpanded : undefined}
-            aria-label={`Select ${question.question}`}
-            onClick={() => {
-              if (isSelected) {
-                setSelectedQuestionId(null);
-                closeQuestionForm();
-                setIsAiPanelOpen(false);
-                closePagePlan();
-                return;
-              }
-              closeQuestionForm();
-              setIsAiPanelOpen(false);
-              closePagePlan();
-              setSelectedQuestionId(question.id);
-              setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
-              if (children.length) {
-                setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
-              }
-            }}
-          >
-            <span className="tree-branch" aria-hidden="true">{children.length ? (isExpanded ? "▾" : "▸") : "·"}</span>
-            {question.depth === 0 && <span className="question-number" aria-label={`Main question ${siblingIndex + 1}`}>{siblingIndex + 1}</span>}
-            <span className="tree-node-copy">
-              <strong>{question.question}</strong>
-              <span className="tree-meta">
-                {questionKind(question.depth)} <span className={`question-status-indicator status-${question.status.toLowerCase()}`} title={question.status.toLowerCase()} aria-label={question.status.toLowerCase()} />
-              </span>
-            </span>
-          </button>
-        </div>
-        {isSelected && (
-          <section className="selected-question-card" aria-label={`Selected ${questionKind(question.depth).toLowerCase()}`}>
-            <div className="selected-question-context">
-              <span>{questionKind(question.depth)} · Level {question.depth}</span>
-              <span>Order {question.displayOrder + 1} of {selectedSiblings.length}</span>
-              <span className={`question-status-badge status-${question.status.toLowerCase()}`}>{question.status.toLowerCase()}</span>
-            </div>
-            <div className="question-disclosures">
-              <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedAnswers[question.id])}
-                onClick={() => setRevealedAnswers((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedAnswers[question.id] ? "Hide reference answer" : "Show reference answer"}
-              </button>
-              {question.example && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedExamples[question.id])}
-                onClick={() => setRevealedExamples((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedExamples[question.id] ? "Hide example" : "Show example"}
-              </button>}
-              {question.codeSnippet && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedCodeSnippets[question.id])}
-                onClick={() => setRevealedCodeSnippets((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedCodeSnippets[question.id] ? "Hide code" : "Show code"}
-              </button>}
-              {question.tags.length > 0 && <button
-                className="answer-disclosure"
-                type="button"
-                aria-expanded={Boolean(revealedTags[question.id])}
-                onClick={() => setRevealedTags((current) => ({ ...current, [question.id]: !current[question.id] }))}
-              >
-                {revealedTags[question.id] ? "Hide tags" : "Show tags"}
-              </button>}
-            </div>
-            {revealedAnswers[question.id] && <p className="inline-answer">{question.answer}</p>}
-            {revealedExamples[question.id] && question.example && <p className="inline-answer inline-example">{question.example}</p>}
-            {revealedCodeSnippets[question.id] && question.codeSnippet && <pre className="inline-code-snippet"><code>{question.codeSnippet}</code></pre>}
-            {revealedTags[question.id] && question.tags.length > 0 && <div className="inline-tags">{question.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
-            <div className="selected-question-actions" aria-label="Question actions">
-              <div className="order-actions" aria-label="Change question order">
-                <button type="button" aria-label="Move question up" title={selectedSiblingIndex > 0 ? "Move up" : "Already first in this group"} disabled={selectedSiblingIndex <= 0} onClick={() => moveQuestion(question.id, -1)}>↑</button>
-                <button type="button" aria-label="Move question down" title={selectedSiblingIndex < selectedSiblings.length - 1 ? "Move down" : "Already last in this group"} disabled={selectedSiblingIndex < 0 || selectedSiblingIndex >= selectedSiblings.length - 1} onClick={() => moveQuestion(question.id, 1)}>↓</button>
-              </div>
-              <button type="button" title="Edit question" onClick={() => openQuestionEditor(question)}>Edit</button>
-              <button type="button" title="Ask AI to improve this saved question and answer" onClick={() => improveQuestionWithAi(question)}>Improve with AI</button>
-              <button type="button" title="Add a follow-up question" onClick={() => startQuestionCreation(question.id)}>+ Follow-up</button>
-              <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("follow-up")}>Generate follow-ups</button>
-              <button type="button" disabled={isAiBusy} title="Open the editor to generate a short example and optional code snippet" onClick={() => prepareDetailsGeneration(question)}>
-                {generatingDetailsFor === question.id ? "Generating details..." : "Generate example + code"}
-              </button>
-              <button className="danger" type="button" title="Delete question and its follow-ups" onClick={() => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount: descendantCount(question.id, orderedQuestions) })}>Delete</button>
-            </div>
-          </section>
-        )}
-        {isExpanded && childNodes.length > 0 && <div className="tree-children">{childNodes}</div>}
-      </article>
-    );
-  };
-
   const handleLogin = async (username: string, password: string) => {
     setError("");
     const encoded = btoa(`${username}:${password}`);
     try {
-      await request("/api/admin/pages", {}, encoded);
+      await request("/api/admin/topics", {}, encoded);
       saveCredentials(encoded);
       setCredentials(encoded);
     } catch (err) {
@@ -881,55 +796,59 @@ function AdminWorkspace() {
     }
   };
 
-  const handlePageSubmit = async (event: FormEvent) => {
+  const handleTopicSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     setNotice("");
-    setPageFieldError("");
-    if (!pageForm.section.trim() || !pageForm.title.trim() || !pageForm.slug.trim()) {
-      setPageFieldError("Section, title, and slug are required.");
+    setTopicFieldError("");
+    if (topicForm.categoryId === null || !categories.some((item) => item.id === topicForm.categoryId) || !topicForm.title.trim() || !topicForm.slug.trim()) {
+      setTopicFieldError("Choose a category and enter a title and slug.");
       return;
     }
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(pageForm.slug.trim())) {
-      setPageFieldError("Slug must contain lowercase letters, numbers, and hyphens only.");
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topicForm.slug.trim())) {
+      setTopicFieldError("Slug must contain lowercase letters, numbers, and hyphens only.");
       return;
     }
     setLoading(true);
     try {
-      const isNew = !page;
-      if (isNew && pages.some((item) => item.slug === pageForm.slug.trim())) {
+      const isNew = !topic;
+      if (isNew && topics.some((item) => item.slug === topicForm.slug.trim())) {
         throw new Error(
           "This slug already exists. Use a new slug, such as java-collections.",
         );
       }
-      const section = await getOrCreateSection(pageForm.section);
+      if (topics.some((item) => item.categoryId === topicForm.categoryId
+        && item.title.trim().toLocaleLowerCase() === topicForm.title.trim().toLocaleLowerCase()
+        && item.slug !== topic?.slug)) {
+        throw new Error(`Topic "${topicForm.title.trim()}" already exists in this category.`);
+      }
       const payload = isNew
         ? {
-            slug: pageForm.slug.trim(),
-            title: pageForm.title.trim(),
-            description: pageForm.description.trim() || null,
-            sectionId: section.id,
-            displayOrder: pageForm.displayOrder,
+            slug: topicForm.slug.trim(),
+            title: topicForm.title.trim(),
+            description: topicForm.description.trim() || null,
+            categoryId: topicForm.categoryId,
+            displayOrder: topicForm.displayOrder,
           }
         : {
-            title: pageForm.title.trim(),
-            description: pageForm.description.trim() || null,
-            sectionId: section.id,
-            displayOrder: pageForm.displayOrder,
+            title: topicForm.title.trim(),
+            description: topicForm.description.trim() || null,
+            categoryId: topicForm.categoryId,
+            displayOrder: topicForm.displayOrder,
           };
       const result = (await request(
         isNew
-          ? "/api/admin/pages"
-          : `/api/admin/pages/${encodeURIComponent(page.slug)}`,
+          ? "/api/admin/topics"
+          : `/api/admin/topics/${encodeURIComponent(topic.slug)}`,
         {
           method: isNew ? "POST" : "PUT",
           body: JSON.stringify(payload),
         },
-      )) as Page;
-      setNotice(isNew ? "Page created" : "Page updated");
-      await loadPages();
+      )) as Topic;
+      setNotice(isNew ? "Topic created" : "Topic updated");
+      await loadTopics();
       setSelectedSlug(result.slug);
-      await loadPage(result.slug);
+      await loadTopic(result.slug);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -939,7 +858,7 @@ function AdminWorkspace() {
 
   const handleQuestionSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!page) return;
+    if (!topic) return;
     setError("");
     setNotice("");
     setQuestionFieldError("");
@@ -951,7 +870,7 @@ function AdminWorkspace() {
     try {
       const path = editingQuestionId
         ? `/api/admin/questions/${editingQuestionId}`
-        : `/api/admin/pages/${encodeURIComponent(page.slug)}/questions`;
+        : `/api/admin/topics/${encodeURIComponent(topic.slug)}/questions`;
       const savedQuestion = (await request(path, {
         method: editingQuestionId ? "PUT" : "POST",
         body: JSON.stringify({
@@ -971,7 +890,7 @@ function AdminWorkspace() {
       setGeneratedQuestions([]);
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
-      await loadPage(page.slug);
+      await loadTopic(topic.slug);
       setSelectedQuestionId(savedQuestion.id);
       if (savedQuestion.parentQuestionId !== null) {
         setExpandedQuestions((current) => ({ ...current, [savedQuestion.parentQuestionId as number]: true }));
@@ -992,7 +911,7 @@ function AdminWorkspace() {
       setError("Select a parent question before generating follow-ups.");
       return;
     }
-    if (aiGenerationMode === "batch-main" && (!Number.isInteger(aiCount) || aiCount < 1 || aiCount > maxBatchQuestionCount)) {
+    if (aiGenerationMode === "main" && (!Number.isInteger(aiCount) || aiCount < 1 || aiCount > maxBatchQuestionCount)) {
       setError(`Number of questions must be between 1 and ${maxBatchQuestionCount}.`);
       return;
     }
@@ -1018,13 +937,13 @@ function AdminWorkspace() {
             idea: aiIdea.trim() || null,
             parentQuestion: aiGenerationMode === "follow-up" ? selectedQuestion?.question ?? null : null,
             parentAnswer: aiGenerationMode === "follow-up" ? selectedQuestion?.answer ?? null : null,
-            pageTitle: page?.title,
-            pageSection: page?.section,
-            pageDescription: page?.description ?? "",
+            topicTitle: topic?.title,
+            topicCategory: topic?.category,
+            topicDescription: topic?.description ?? "",
             difficulty: selectedDifficulty,
             type: aiType,
-            count: aiGenerationMode === "batch-main"
-              ? aiCount
+            count: aiGenerationMode === "main"
+              ? aiGenerateAlternatives && aiCount === 1 ? 2 : aiCount
               : aiGenerateAlternatives
                 ? Math.min(Math.max(aiCount, 1), 2)
                 : 1,
@@ -1045,7 +964,7 @@ function AdminWorkspace() {
       setAiUsage(result.usage ?? null);
       setIsAiPanelOpen(true);
       window.requestAnimationFrame(() => {
-        scrollToSection("ai-assist");
+        scrollToCategory("ai-assist");
       });
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1078,7 +997,7 @@ function AdminWorkspace() {
     setEditingQuestionId(editingExistingQuestion ? selectedQuestion.id : null);
     setIsQuestionFormOpen(true);
     setIsAiPanelOpen(false);
-    setIsPagePlanOpen(false);
+    setIsTopicPlanOpen(false);
     setSelectedGeneratedIndexes([]);
     setQuestionFieldError("");
     window.requestAnimationFrame(() => {
@@ -1116,7 +1035,7 @@ function AdminWorkspace() {
   };
 
   const saveGeneratedQuestions = async (questions: GeneratedQuestionDraft[]) => {
-    if (!page || questions.length === 0) return;
+    if (!topic || questions.length === 0) return;
     if (questions.some((question) => !question.question.trim() || !question.answer.trim())) {
       setError("Each generated question needs both a question and an answer before saving.");
       return;
@@ -1125,7 +1044,7 @@ function AdminWorkspace() {
     setAiLoadingMessage(aiLoadingMessages[0]);
     setAiLoading(true);
     try {
-      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions/bulk`, {
+      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}/questions/bulk`, {
         method: "POST",
         body: JSON.stringify({
           questions: questions.map((question, index) => ({
@@ -1146,7 +1065,7 @@ function AdminWorkspace() {
       setMergedQuestion(null);
       setSelectedGeneratedIndexes([]);
       setIsAiPanelOpen(false);
-      await loadPage(page.slug);
+      await loadTopic(topic.slug);
       setNotice(`${questions.length} initial question${questions.length === 1 ? "" : "s"} created`);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1163,6 +1082,10 @@ function AdminWorkspace() {
 
   const updateGeneratedQuestionStatus = (draftId: string, status: QuestionStatus) => {
     setGeneratedQuestions((current) => current.map((item) => item.draftId === draftId ? { ...item, status } : item));
+  };
+
+  const updateAllGeneratedQuestionStatuses = (status: QuestionStatus) => {
+    setGeneratedQuestions((current) => current.map((item) => ({ ...item, status })));
   };
 
   const updateAnswerImprovement = (draftId: string, update: Partial<AnswerImprovement>) => {
@@ -1211,7 +1134,7 @@ function AdminWorkspace() {
   };
 
   const saveGeneratedQuestion = async (draft: GeneratedQuestionDraft) => {
-    if (!page || !draft.question.trim() || !draft.answer.trim()) {
+    if (!topic || !draft.question.trim() || !draft.answer.trim()) {
       setError("The generated question needs both a question and an answer before saving.");
       return;
     }
@@ -1232,7 +1155,7 @@ function AdminWorkspace() {
     try {
       const path = editingExistingQuestion
         ? `/api/admin/questions/${editingQuestionId}`
-        : `/api/admin/pages/${encodeURIComponent(page.slug)}/questions`;
+        : `/api/admin/topics/${encodeURIComponent(topic.slug)}/questions`;
       await request(path, {
         method: editingExistingQuestion ? "PUT" : "POST",
         body: JSON.stringify({
@@ -1253,7 +1176,7 @@ function AdminWorkspace() {
       setSelectedGeneratedIndexes((current) => current
         .filter((index) => index !== removedIndex)
         .map((index) => index > removedIndex ? index - 1 : index));
-      await loadPage(page.slug);
+      await loadTopic(topic.slug);
       setNotice(editingExistingQuestion ? "Question updated" : "Question saved");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1286,13 +1209,13 @@ function AdminWorkspace() {
   };
 
   const deleteQuestion = async (questionId: number) => {
-    if (!page) return;
+    if (!topic) return;
     setLoading(true);
     setError("");
     setNotice("");
     try {
       await request(`/api/admin/questions/${questionId}`, { method: "DELETE" });
-      await loadPage(page.slug);
+      await loadTopic(topic.slug);
       setDeleteConfirmation(null);
       setNotice("Question deleted");
     } catch (err) {
@@ -1304,7 +1227,7 @@ function AdminWorkspace() {
   };
 
   const moveQuestion = async (questionId: number, direction: -1 | 1) => {
-    if (!page) return;
+    if (!topic) return;
     const question = questionById.get(questionId);
     if (!question) return;
     const siblings = orderedQuestions.filter((item) => item.parentQuestionId === question.parentQuestionId);
@@ -1324,11 +1247,11 @@ function AdminWorkspace() {
     setError("");
     setNotice("");
     try {
-      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}/questions/order`, {
+      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}/questions/order`, {
         method: "PUT",
         body: JSON.stringify({ questionIds: reorderedQuestionIds }),
       });
-      await loadPage(page.slug);
+      await loadTopic(topic.slug);
       setNotice("Question order saved");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -1337,24 +1260,24 @@ function AdminWorkspace() {
     }
   };
 
-  const moveSection = async (sectionId: number, direction: -1 | 1) => {
-    const currentIndex = sections.findIndex((section) => section.id === sectionId);
+  const moveCategory = async (categoryId: number, direction: -1 | 1) => {
+    const currentIndex = categories.findIndex((category) => category.id === categoryId);
     const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= categories.length) return;
 
-    const reorderedSectionIds = sections.map((section) => section.id);
-    const [movedSectionId] = reorderedSectionIds.splice(currentIndex, 1);
-    reorderedSectionIds.splice(targetIndex, 0, movedSectionId);
+    const reorderedCategoryIds = categories.map((category) => category.id);
+    const [movedCategoryId] = reorderedCategoryIds.splice(currentIndex, 1);
+    reorderedCategoryIds.splice(targetIndex, 0, movedCategoryId);
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await request("/api/admin/sections/order", {
+      await request("/api/admin/categories/order", {
         method: "PUT",
-        body: JSON.stringify({ sectionIds: reorderedSectionIds }),
+        body: JSON.stringify({ categoryIds: reorderedCategoryIds }),
       });
-      await loadSections();
-      setNotice("Section order saved");
+      await loadCategories();
+      setNotice("Category order saved");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1362,24 +1285,24 @@ function AdminWorkspace() {
     }
   };
 
-  const movePage = async (sectionId: number, sectionPages: PageSummary[], slug: string, direction: -1 | 1) => {
-    const currentIndex = sectionPages.findIndex((item) => item.slug === slug);
+  const moveTopic = async (categoryId: number, categoryTopics: TopicSummary[], slug: string, direction: -1 | 1) => {
+    const currentIndex = categoryTopics.findIndex((item) => item.slug === slug);
     const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sectionPages.length) return;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= categoryTopics.length) return;
 
-    const pageSlugs = sectionPages.map((item) => item.slug);
-    const [movedSlug] = pageSlugs.splice(currentIndex, 1);
-    pageSlugs.splice(targetIndex, 0, movedSlug);
+    const topicSlugs = categoryTopics.map((item) => item.slug);
+    const [movedSlug] = topicSlugs.splice(currentIndex, 1);
+    topicSlugs.splice(targetIndex, 0, movedSlug);
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await request(`/api/admin/sections/${sectionId}/pages/order`, {
+      await request(`/api/admin/categories/${categoryId}/topics/order`, {
         method: "PUT",
-        body: JSON.stringify({ pageSlugs }),
+        body: JSON.stringify({ topicSlugs }),
       });
-      await loadPages();
-      setNotice("Page order saved");
+      await loadTopics();
+      setNotice("Topic order saved");
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -1387,20 +1310,20 @@ function AdminWorkspace() {
     }
   };
 
-  const deletePage = async () => {
-    if (!page) return;
+  const deleteTopic = async () => {
+    if (!topic) return;
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      await request(`/api/admin/pages/${encodeURIComponent(page.slug)}`, {
+      await request(`/api/admin/topics/${encodeURIComponent(topic.slug)}`, {
         method: "DELETE",
       });
-      setPage(null);
+      setTopic(null);
       setSelectedSlug("");
       setDeleteConfirmation(null);
-      setNotice("Page deleted");
-      await loadPages();
+      setNotice("Topic deleted");
+      await loadTopics();
     } catch (err) {
       setDeleteConfirmation(null);
       setError(getErrorMessage(err));
@@ -1434,118 +1357,96 @@ function AdminWorkspace() {
           </button>
         </div>
       </header>
-      {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} pagePlanLoading={pagePlanLoading} />}
+      {isAiBusy && <AiLoadingOverlay message={aiLoadingMessage} topicPlanLoading={topicPlanLoading} />}
+      {categoryDialogSource && <CategoryCreateDialog
+        suggestedOrder={categories.length}
+        onCreate={createCategory}
+        onClose={() => setCategoryDialogSource(null)}
+      />}
       <div className="workspace">
         <ContentLibrary
-          pages={pages}
-          sections={sections}
-          pagesBySection={pagesBySection}
+          topics={topics}
+          categories={categories}
+          topicsByCategory={topicsByCategory}
           selectedSlug={selectedSlug}
-          search={pageSearch}
-          collapsedSections={collapsedSections}
+          search={topicSearch}
+          collapsedCategories={collapsedCategories}
           createMenuOpen={isCreateMenuOpen}
           loading={loading}
-          difficulty={selectedDifficulty}
-          onDifficultyChange={(difficulty) => {
-            setSelectedDifficulty(difficulty);
-            setGeneratedQuestions([]);
-            setMergedQuestion(null);
-            setSelectedGeneratedIndexes([]);
-            setIsAiPanelOpen(false);
-            setIsQuestionFormOpen(false);
-          }}
-          onSearchChange={setPageSearch}
+          onSearchChange={setTopicSearch}
           onToggleCreateMenu={() => setIsCreateMenuOpen((current) => !current)}
-          onNewPage={openNewPage}
-          onNewPagePlan={() => { setIsCreateMenuOpen(false); openNewPagePlan(); }}
+          onCloseCreateMenu={() => setIsCreateMenuOpen(false)}
+          onNewTopic={openNewTopic}
+          onNewCategory={() => { setIsCreateMenuOpen(false); setCategoryDialogSource("menu"); }}
+          onNewTopicPlan={() => { setIsCreateMenuOpen(false); openNewTopicPlan(); }}
           onOpenStudyProgram={openStudyProgram}
-          onToggleSection={(section) => { setIsCreateMenuOpen(false); closePagePlan(); setCollapsedSections((current) => ({ ...current, [section]: !current[section] })); }}
-          onSelectPage={(slug) => { setIsCreateMenuOpen(false); closePagePlan(); setSelectedSlug(slug); }}
-          onMoveSection={moveSection}
-          onMovePage={movePage}
-          onOpenPagePlan={openPagePlan}
+          onToggleCategory={(category) => { setIsCreateMenuOpen(false); closeTopicPlan(); setCollapsedCategories((current) => ({ ...current, [category]: !current[category] })); }}
+          onSelectTopic={(slug) => { setIsCreateMenuOpen(false); closeTopicPlan(); setSelectedSlug(slug); }}
+          onMoveCategory={moveCategory}
+          onMoveTopic={moveTopic}
+          onOpenTopicPlan={openTopicPlan}
         />
         <section className="editor" id="content-library">
           <StatusBanner error={error} notice={notice} onDismiss={() => { setError(""); setNotice(""); }} />
-          {isStudyProgramOpen && <StudyProgramEditor pages={pages} programs={studyPrograms} loading={loading} onSave={saveStudyProgram} onClose={() => setIsStudyProgramOpen(false)} />}
-          {!isStudyProgramOpen && !isPagePlanOpen && <>
+          {isStudyProgramOpen && <StudyProgramEditor topics={topics} programs={studyPrograms} loading={loading} onSave={saveStudyProgram} onClose={() => setIsStudyProgramOpen(false)} />}
+          {!isStudyProgramOpen && !isTopicPlanOpen && <>
             <div className="editor-heading">
               <div>
-                <p className="eyebrow">{page ? "Editing page" : "New page"}</p>
-                <h2>{page?.title ?? (pages.length ? "Create a new page" : "Create your first page")}</h2>
+                <p className="eyebrow">{topic ? "Editing topic" : "New topic"}</p>
+                <h2>{topic?.title ?? (topics.length ? "Create a new topic" : "Create your first topic")}</h2>
               </div>
-              {page && (
-                <button
-                  className="danger"
-                  type="button"
-                  onClick={() => setDeleteConfirmation({ type: "page", title: page.title, slug: page.slug })}
-                >
-                  Delete page
-                </button>
-              )}
             </div>
-            <div className="page-form-heading">
+            <div className="topic-form-heading">
               <div>
-                <p className="eyebrow">Page details</p>
-                <div className="page-form-summary">
-                  {page && (
+                <p className="eyebrow">Topic details</p>
+                <div className="topic-form-summary">
+                  {topic && (
                     <button
-                      className="page-form-toggle"
+                      className="topic-form-toggle"
                       type="button"
-                      aria-expanded={isPageFormOpen}
-                      aria-controls="page-form"
-                      aria-label={isPageFormOpen ? "Collapse page details" : "Expand page details"}
-                      title={isPageFormOpen ? "Collapse page details" : "Expand page details"}
-                      onClick={() => setIsPageFormOpen((open) => !open)}
+                      aria-expanded={isTopicFormOpen}
+                      aria-controls="topic-form"
+                      aria-label={isTopicFormOpen ? "Collapse topic details" : "Expand topic details"}
+                      title={isTopicFormOpen ? "Collapse topic details" : "Expand topic details"}
+                      onClick={() => setIsTopicFormOpen((open) => !open)}
                     />
                   )}
-                  {!isPageFormOpen && <span>{pageForm.section} · {pageForm.slug}</span>}
+                  {!isTopicFormOpen && <span>{categories.find((item) => item.id === topicForm.categoryId)?.name ?? topic?.category} · {topicForm.slug}</span>}
                 </div>
               </div>
             </div>
-            {isPageFormOpen && <form className="page-form" id="page-form" onSubmit={handlePageSubmit}>
+            {isTopicFormOpen && <form className="topic-form" id="topic-form" onSubmit={handleTopicSubmit}>
             <div className="form-fields">
-              <label>
-                <span className="field-label">
-                  Section <span className="label-note">(suggestions available)</span>
-                </span>
-                <input
-                  value={pageForm.section}
-                  list="section-suggestions"
-                  onChange={(event) => {
-                    setPageFieldError("");
-                    setPageForm({
-                      ...pageForm,
-                      section: event.target.value,
-                      ...(page || slugWasEdited
-                        ? {}
-                        : { slug: generateSlug(event.target.value, pageForm.title) }),
+              <div className="topic-category-field">
+                <label htmlFor="topic-category">Category</label>
+                <div className="category-picker">
+                  <select id="topic-category" value={topicForm.categoryId ?? ""} onChange={(event) => {
+                    const categoryId = event.target.value ? Number(event.target.value) : null;
+                    const categoryName = categories.find((item) => item.id === categoryId)?.name ?? "";
+                    setTopicFieldError("");
+                    setTopicForm({ ...topicForm, categoryId,
+                      ...(topic || slugWasEdited ? {} : { slug: generateSlug(categoryName, topicForm.title) }),
                     });
-                  }}
-                  required
-                />
-                <datalist id="section-suggestions">
-                  {sectionSuggestions.map((section) => (
-                    <option key={section} value={section} />
-                  ))}
-                </datalist>
-                <small className="field-hint">
-                  Choose an existing section or type a new one.
-                </small>
-                {pageFieldError && <small className="field-error">{pageFieldError}</small>}
-              </label>
+                  }} required>
+                    <option value="">Select category…</option>
+                    {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setCategoryDialogSource("inline")}>+ New category</button>
+                </div>
+                {topicFieldError && <small className="field-error">{topicFieldError}</small>}
+              </div>
               <label>
                 Title
                 <input
-                  value={pageForm.title}
+                  value={topicForm.title}
                   onChange={(event) => {
-                    setPageFieldError("");
-                    setPageForm({
-                      ...pageForm,
+                    setTopicFieldError("");
+                    setTopicForm({
+                      ...topicForm,
                       title: event.target.value,
-                      ...(page || slugWasEdited
+                      ...(topic || slugWasEdited
                         ? {}
-                        : { slug: generateSlug(pageForm.section, event.target.value) }),
+                        : { slug: generateSlug(categories.find((item) => item.id === topicForm.categoryId)?.name ?? "", event.target.value) }),
                     });
                   }}
                   required
@@ -1554,18 +1455,18 @@ function AdminWorkspace() {
               <label>
                 Slug
                 <input
-                  value={pageForm.slug}
-                  disabled={Boolean(page)}
+                  value={topicForm.slug}
+                  disabled={Boolean(topic)}
                   onChange={(event) => {
-                    setPageFieldError("");
+                    setTopicFieldError("");
                     setSlugWasEdited(true);
-                    setPageForm({ ...pageForm, slug: event.target.value });
+                    setTopicForm({ ...topicForm, slug: event.target.value });
                   }}
                   pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                   required
                 />
                 <small className="field-hint">
-                  Suggested from section and title. You can edit it, but it must be unique and URL-safe.
+                  Suggested from category and title. You can edit it, but it must be unique and URL-safe.
                 </small>
               </label>
               <label>
@@ -1573,67 +1474,83 @@ function AdminWorkspace() {
                 <input
                   type="number"
                   min="0"
-                  value={pageForm.displayOrder}
+                  value={topicForm.displayOrder}
                   onChange={(event) =>
-                    setPageForm({
-                      ...pageForm,
+                    setTopicForm({
+                      ...topicForm,
                       displayOrder: Number(event.target.value),
                     })
                   }
                   required
                 />
               </label>
-              <label className="page-description-field">
+              <label className="topic-description-field">
                 Description
                 <textarea
                   rows={2}
-                  value={pageForm.description}
-                  onChange={(event) => setPageForm({ ...pageForm, description: event.target.value })}
+                  value={topicForm.description}
+                  onChange={(event) => setTopicForm({ ...topicForm, description: event.target.value })}
                 />
-                <small className="field-hint">A short summary for this page.</small>
+                <small className="field-hint">A short summary for this topic.</small>
               </label>
               <div className="form-actions">
+                {topic && (
+                  <button
+                    className="danger"
+                    type="button"
+                    onClick={() => setDeleteConfirmation({ type: "topic", title: topic.title, slug: topic.slug })}
+                  >
+                    Delete topic
+                  </button>
+                )}
                 <button className="primary" type="submit">
-                  {page ? "Save page" : "Create page"}
+                  {topic ? "Save topic" : "Create topic"}
                 </button>
               </div>
             </div>
             </form>}
-            {page && <div className="page-form-separator" aria-hidden="true" />}
+            {topic && <div className="topic-form-separator" aria-hidden="true" />}
           </>}
-          {isPagePlanOpen && (
-            <section className="plan-editor" id="page-plan" aria-label={`Create pages with AI for ${pagePlanSectionName || "a new section"}`}>
-              <div className="section-heading">
+          {isTopicPlanOpen && (
+            <section className="plan-editor" id="topic-plan" aria-label={`Create topics with AI for ${topicPlanCategoryName || "a new category"}`}>
+              <div className="category-heading">
                 <div>
                   <p className="eyebrow">AI assist</p>
-                  <h3>Generate pages with AI</h3>
-                  <span>{pagePlanSection ? `${pagePlanSection.name} · ` : "Start with a new section · "}proposals remain unpublished until you create the selected pages</span>
+                  <h3>Generate topics with AI</h3>
+                  <span>{topicPlanCategory ? `${topicPlanCategory.name} · ` : "Start with a new category · "}proposals remain unpublished until you create the selected topics</span>
                 </div>
               </div>
-              <form className="plan-form" onSubmit={generatePagePlan}>
+              <form className="plan-form" onSubmit={generateTopicPlan}>
                 <label>
-                  Section name
-                  <input id="page-plan-section-name" value={pagePlanSectionName} onChange={(event) => setPagePlanSectionName(event.target.value)} placeholder="e.g. Java Concurrency" maxLength={100} required />
-                  <small className="field-hint">Choose the section that will contain the generated pages; set the learner level below.</small>
+                  Category
+                  <input id="topic-plan-category-name" value={topicPlanCategoryName} onChange={(event) => {
+                    const categoryName = event.target.value;
+                    setTopicPlanCategoryName(categoryName);
+                    if (topicPlanCategory && topicPlanCategory.name.trim().toLowerCase() !== categoryName.trim().toLowerCase()) {
+                      setTopicPlanCategory(null);
+                    }
+                  }} placeholder="e.g. Java" maxLength={100} required />
+                  <small className="field-hint">Topics are generated under this Category. A matching existing Category is reused when you create selected Topics.</small>
                 </label>
                 <label>
-                  Audience / target role
-                  <input value={pagePlanTargetRole} onChange={(event) => setPagePlanTargetRole(event.target.value)} placeholder="e.g. Beginner backend engineer" required />
-                  <small className="field-hint">Controls the depth and expectations of the generated pages.</small>
+                  Target interview role
+                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Senior Backend Engineer" required />
+                  <small className="field-hint">Sets the expected interview scope and seniority. Question difficulty is configured separately.</small>
                 </label>
                 <label>
-                  Additional guidance (optional)
+                  Topic guidance (optional)
                   <textarea
                     rows={3}
-                    value={pagePlanGuidance}
-                    onChange={(event) => setPagePlanGuidance(event.target.value)}
-                    placeholder="For a second plan, say what to avoid and which deeper areas to prioritize."
+                    value={topicPlanGuidance}
+                    onChange={(event) => setTopicPlanGuidance(event.target.value)}
+                    placeholder="Focus on Java Collections. Include List, Set, Map, Queue/Deque, immutable and concurrent collections. Avoid Streams."
                   />
+                  <small className="field-hint">Describe topics to include, exclude, emphasize, or organize. Leave blank to let AI choose based on the Category and target role.</small>
                 </label>
-                {pagePlanSectionName.trim() && pages.some((item) => item.section.toLowerCase() === (pagePlanSection?.name ?? pagePlanSectionName.trim()).toLowerCase()) && (
-                  <div className="page-plan-existing">
-                    <span className="field-label">Existing pages excluded from suggestions</span>
-                    <p>{pages.filter((item) => item.section.toLowerCase() === (pagePlanSection?.name ?? pagePlanSectionName.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
+                {topicPlanCategoryName.trim() && topics.some((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()) && (
+                  <div className="topic-plan-existing">
+                    <span className="field-label">Existing topics excluded from suggestions</span>
+                    <p>{topics.filter((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
                   </div>
                 )}
                 <fieldset className="focus-options">
@@ -1642,76 +1559,73 @@ function AdminWorkspace() {
                     <label key={focus}>
                       <input
                         type="checkbox"
-                        checked={pagePlanFocuses.includes(focus)}
-                        onChange={() => setPagePlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
+                        checked={topicPlanFocuses.includes(focus)}
+                        onChange={() => setTopicPlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
                       />
                       {focus}
                     </label>
                   ))}
                 </fieldset>
                 <label>
-                  Number of pages
+                  Number of topics
                   <input
                     type="number"
                     min={1}
                     max={15}
                     step={1}
-                    value={pagePlanPageCount}
-                    onChange={(event) => setPagePlanPageCount(Number(event.target.value))}
+                    value={topicPlanTopicCount}
+                    onChange={(event) => setTopicPlanTopicCount(Number(event.target.value))}
                     required
                   />
-                  <small className="field-hint">Choose between 1 and 15 pages.</small>
+                  <small className="field-hint">Choose between 1 and 15 topics.</small>
                 </label>
                 <div className="actions question-form-actions">
-                    <button className="primary" type="submit" disabled={isAiBusy}>{pagePlanLoading ? "Generating pages..." : "Generate pages with AI"}</button>
+                    <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating topics..." : "Generate topics with AI"}</button>
                 </div>
               </form>
-              {generatedPageProposals.length > 0 && (
+              {generatedTopicProposals.length > 0 && (
                 <div className="plan-proposals">
                   <div className="generated-heading">
-                    <h4>Suggested pages</h4>
+                    <h4>Suggested topics</h4>
                     {aiUsage?.totalTokens !== undefined && <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>}
                   </div>
-                  <p className="field-hint">Edit, select, and order these proposals before creating them in this section.</p>
-                  {generatedPageProposals.map((proposal, index) => (
+                  <p className="field-hint">Edit, select, and order these proposals before creating them in this category.</p>
+                  {generatedTopicProposals.map((proposal, index) => (
                     <article className="plan-proposal" key={`${proposal.title}-${index}`}>
                       <div className="plan-proposal-heading">
                         <label className="generated-select">
-                          <input type="checkbox" checked={selectedPageProposalIndexes.includes(index)} onChange={() => setSelectedPageProposalIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
-                          <span className="eyebrow">Page {index + 1}</span>
+                          <input type="checkbox" checked={selectedTopicProposalIndexes.includes(index)} onChange={() => setSelectedTopicProposalIndexes((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index])} />
+                          <span className="eyebrow">Topic {index + 1}</span>
                         </label>
-                        <div className="plan-proposal-actions" aria-label={`Manage suggested page ${index + 1}`}>
-                          <button type="button" aria-label="Move page up" title="Move up" disabled={index === 0} onClick={() => movePageProposal(index, -1)}>↑</button>
-                          <button type="button" aria-label="Move page down" title="Move down" disabled={index === generatedPageProposals.length - 1} onClick={() => movePageProposal(index, 1)}>↓</button>
-                          <button type="button" title="Remove page suggestion" onClick={() => removePageProposal(index)}>Remove</button>
+                        <div className="plan-proposal-actions" aria-label={`Manage suggested topic ${index + 1}`}>
+                          <button type="button" aria-label="Move topic up" title="Move up" disabled={index === 0} onClick={() => moveTopicProposal(index, -1)}>↑</button>
+                          <button type="button" aria-label="Move topic down" title="Move down" disabled={index === generatedTopicProposals.length - 1} onClick={() => moveTopicProposal(index, 1)}>↓</button>
+                          <button type="button" title="Remove topic suggestion" onClick={() => removeTopicProposal(index)}>Remove</button>
                         </div>
                       </div>
-                      <label>Title<input value={proposal.title} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
-                      <label>Description<textarea rows={2} value={proposal.description} onChange={(event) => setGeneratedPageProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
+                      <label>Title<input value={proposal.title} onChange={(event) => setGeneratedTopicProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} /></label>
+                      <label>Description<textarea rows={2} value={proposal.description} onChange={(event) => setGeneratedTopicProposals((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /></label>
                     </article>
                   ))}
                   <div className="actions question-form-actions">
-                    <button className="primary" type="button" disabled={!selectedPageProposalIndexes.length || loading} onClick={savePagePlan}>Create selected pages</button>
-                    <button type="button" disabled={loading} onClick={() => { setGeneratedPageProposals([]); setSelectedPageProposalIndexes([]); }}>Discard suggestions</button>
+                    <button className="primary" type="button" disabled={!selectedTopicProposalIndexes.length || loading} onClick={saveTopicPlan}>Create selected topics</button>
+                    <button type="button" disabled={loading} onClick={() => { setGeneratedTopicProposals([]); setSelectedTopicProposalIndexes([]); }}>Discard suggestions</button>
                   </div>
                 </div>
               )}
             </section>
           )}
-          {page && !isPagePlanOpen && (
+          {topic && !isTopicPlanOpen && (
             <>
               <div className="interview-heading">
                 <div>
                   <p className="eyebrow">Question workspace</p>
                   <h3>Interview questions</h3>
-                  <span className="interview-context">{page.section} / {page.title} · {page.questions.length} questions · organize main questions and follow-ups</span>
+                  <span className="interview-context">{topic.category} / {topic.title} · {topic.questions.length} questions · organize main questions and follow-ups</span>
                 </div>
                 <div className="question-actions">
                     <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("main")}>
-                    AI generate question
-                  </button>
-                  <button className="primary" type="button" disabled={isAiBusy} onClick={() => focusAiGeneration("batch-main")}>
-                    Generate multiple questions with AI
+                    Generate questions with AI
                   </button>
                   <button className="manual-action" type="button" onClick={() => startQuestionCreation(null)}>
                     <span aria-hidden="true">+</span>
@@ -1719,6 +1633,23 @@ function AdminWorkspace() {
                   </button>
                 </div>
               </div>
+              <label className="workspace-difficulty">
+                <span>Question difficulty</span>
+                <select value={selectedDifficulty} onChange={(event) => {
+                  setSelectedDifficulty(event.target.value as Difficulty);
+                  setGeneratedQuestions([]);
+                  setMergedQuestion(null);
+                  setSelectedGeneratedIndexes([]);
+                  setIsAiPanelOpen(false);
+                  setIsQuestionFormOpen(false);
+                }} disabled={loading || isAiBusy}>
+                  <option value="BEGINNER">Beginner</option>
+                  <option value="INTERMEDIATE">Intermediate</option>
+                  <option value="ADVANCED">Advanced</option>
+                  <option value="EXPERT">Expert</option>
+                </select>
+                <small>Used when viewing, creating, and generating questions for this topic.</small>
+              </label>
               <div className="question-filter-bar">
                 <label className="search-field question-search">
                   <span>Find a question</span>
@@ -1767,7 +1698,7 @@ function AdminWorkspace() {
                   onSelect={(question, hasChildren) => {
                     closeQuestionForm();
                     setIsAiPanelOpen(false);
-                    closePagePlan();
+                    closeTopicPlan();
                     setSelectedQuestionId(question.id);
                     setAiGenerationMode(question.depth === 0 ? "main" : "follow-up");
                     if (hasChildren) setExpandedQuestions((current) => ({ ...current, [question.id]: true }));
@@ -1776,7 +1707,7 @@ function AdminWorkspace() {
                     setSelectedQuestionId(null);
                     closeQuestionForm();
                     setIsAiPanelOpen(false);
-                    closePagePlan();
+                    closeTopicPlan();
                   }}
                   onToggleAnswer={(id) => setRevealedAnswers((current) => ({ ...current, [id]: !current[id] }))}
                   onToggleExample={(id) => setRevealedExamples((current) => ({ ...current, [id]: !current[id] }))}
@@ -1791,7 +1722,7 @@ function AdminWorkspace() {
                   onDelete={(question, childCount) => setDeleteConfirmation({ type: "question", id: question.id, title: question.question, childCount })}
                 />
                   {!rootQuestions.some(hasVisibleQuestion) && (
-                    <p className="muted">{page.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
+                    <p className="muted">{topic.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
                   )}
                 {isQuestionFormOpen && (
                   <form className={`question-form${isDetailsGeneration ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
@@ -1937,11 +1868,11 @@ function AdminWorkspace() {
                 className={`ai-assist${isQuestionFormOpen ? " ai-assist-open" : ""}`}
                 id="ai-assist"
               >
-                <div className="section-heading">
+                <div className="category-heading">
                   <div>
                     <p className="eyebrow">AI assist</p>
-                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : aiGenerationMode === "batch-main" ? "Generate multiple questions with AI" : "Generate question with AI"}</h3>
-                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerationMode === "batch-main" ? "Generate up to 10 main-question drafts, then review and edit them before saving." : "Generate one draft to review before adding it."}</span>
+                    <h3>{selectedQuestion && editingQuestionId !== null ? "Improve this question with AI" : aiGenerationMode === "follow-up" ? "Generate follow-up candidates" : "Generate questions with AI"}</h3>
+                    <span>{selectedQuestion && editingQuestionId !== null ? `Review alternatives for: “${questionPreview(selectedQuestion.question)}”` : aiGenerationMode === "follow-up" && selectedQuestion ? `For: “${questionPreview(selectedQuestion.question)}” · candidates will be added beneath it` : aiGenerateAlternatives && aiCount === 1 ? "Compare two alternatives, choose one, or merge them into a combined result." : "Set the number of drafts to generate, then review before saving."}</span>
                   </div>
                 </div>
                 <form className="ai-form" onSubmit={generateQuestions}>
@@ -1976,7 +1907,7 @@ function AdminWorkspace() {
                       placeholder={selectedQuestion && editingQuestionId !== null ? "For example: Make the answer more conversational, simplify the explanation, or rewrite this as a senior-backend interview question." : selectedQuestion ? "Optional: ask about trade-offs, failure modes, or a production scenario." : "LongAdder and contention in Java concurrency"}
                     />
                     {aiGenerationMode !== "follow-up" && editingQuestionId === null && (
-                      <small className="field-hint">Leave blank to use the current page context. An idea takes priority and can intentionally overlap existing questions.</small>
+                      <small className="field-hint">Leave blank to use the current topic context. An idea takes priority and can intentionally overlap existing questions.</small>
                     )}
                   </label>
                   {selectedQuestion && editingQuestionId !== null && (
@@ -1998,13 +1929,13 @@ function AdminWorkspace() {
                   <div className="ai-fields">
                     <label className="ai-field">
                       <span className="ai-field-label">Difficulty</span>
-                      <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from content difficulty">
+                      <select value={selectedDifficulty} disabled aria-label="AI difficulty inherited from the question workspace">
                         <option value="BEGINNER">Beginner</option>
                         <option value="INTERMEDIATE">Intermediate</option>
                         <option value="ADVANCED">Advanced</option>
                         <option value="EXPERT">Expert</option>
                       </select>
-                      <small className="field-hint">Inherited from the selected content difficulty.</small>
+                      <small className="field-hint">Inherited from the question workspace.</small>
                     </label>
                     <label className="ai-field">
                       <span className="ai-field-label">Type</span>
@@ -2018,19 +1949,24 @@ function AdminWorkspace() {
                         <option value="TRICK">Trick question</option>
                       </select>
                     </label>
-                    {aiGenerationMode === "batch-main" && (
-                      <label className="ai-field">
+                    {aiGenerationMode === "main" && editingQuestionId === null && (
+                      <div className="ai-field question-count-field">
                         <span className="ai-field-label">Number of questions</span>
-                        <input
-                          type="number"
-                          min={1}
-                          max={maxBatchQuestionCount}
-                          value={aiCount}
-                          onChange={(event) => setAiCount(Number(event.target.value))}
-                        />
-                      </label>
+                        <div className="question-count-control">
+                          <button type="button" aria-label="Generate one fewer question" disabled={aiCount <= 1} onClick={() => { setAiCount((current) => current - 1); setAiGenerateAlternatives(false); }}>−</button>
+                          <input type="number" min={1} max={maxBatchQuestionCount} aria-label="Number of questions" value={aiCount} onChange={(event) => { const nextCount = Number(event.target.value); setAiCount(nextCount); if (nextCount !== 1) setAiGenerateAlternatives(false); }} />
+                          <button type="button" aria-label="Generate one more question" disabled={aiCount >= maxBatchQuestionCount} onClick={() => { setAiCount((current) => current + 1); setAiGenerateAlternatives(false); }}>+</button>
+                        </div>
+                        <small className="field-hint">Choose 1–10 drafts. One is fastest when you want a focused result.</small>
+                        {aiCount === 1 && (
+                          <label className="checkbox-label ai-alternatives-toggle">
+                            <input type="checkbox" checked={aiGenerateAlternatives} onChange={(event) => setAiGenerateAlternatives(event.target.checked)} />
+                            Generate two alternatives
+                          </label>
+                        )}
+                      </div>
                     )}
-                    {aiGenerationMode !== "batch-main" && (
+                    {aiGenerationMode === "follow-up" && (
                       <div className="ai-field ai-alternatives-field">
                         <span className="ai-field-label">Options</span>
                         <label className="checkbox-label">
@@ -2040,7 +1976,6 @@ function AdminWorkspace() {
                             onChange={(event) => {
                               const enabled = event.target.checked;
                               setAiGenerateAlternatives(enabled);
-                              setAiCount(enabled ? 2 : 1);
                             }}
                           />
                           Generate alternatives
@@ -2050,7 +1985,7 @@ function AdminWorkspace() {
                   </div>
                   <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>
-                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiGenerationMode === "batch-main" ? "Generate questions" : "Generate question"}
+                      {aiLoading ? "Generating..." : selectedQuestion && editingQuestionId !== null ? "Generate improvements with AI" : aiGenerationMode === "follow-up" ? "Generate follow-ups with AI" : aiCount > 1 ? "Generate questions" : "Generate question"}
                     </button>
                     <button type="button" disabled={isAiBusy} onClick={closeAiPanel}>Close</button>
                   </div>
@@ -2063,7 +1998,35 @@ function AdminWorkspace() {
                         <span className="field-hint">Last call: {aiUsage.totalTokens} tokens</span>
                       )}
                     </div>
-                    <p className="field-hint">{aiGenerationMode === "batch-main" ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
+                    <p className="field-hint">{isMultipleQuestionGeneration ? "Edit or remove drafts, select the questions you want, then save them together." : selectedQuestion && editingQuestionId !== null ? "Choose an alternative to review in the editor, then save it to update this question." : "Choose a candidate to load it into the editor. Review it there, then save the question."}</p>
+                    <div className="generated-bulk-actions" role="group" aria-label="Bulk publishing status">
+                      <span>Bulk publishing status</span>
+                      <button
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "DRAFT")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("DRAFT")}
+                      >
+                        Mark all draft
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "REVIEWED")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("REVIEWED")}
+                      >
+                        Mark all reviewed
+                      </button>
+                      <button
+                        className="primary"
+                        type="button"
+                        aria-pressed={generatedQuestions.every((question) => question.status === "PUBLISHED")}
+                        disabled={isAiBusy}
+                        onClick={() => updateAllGeneratedQuestionStatuses("PUBLISHED")}
+                      >
+                        Publish all
+                      </button>
+                    </div>
                     {generatedQuestions.map((generated, index) => (
                       <article
                         className={`generated-question${improvingAnswers[generated.draftId] ? " generated-question-improving" : ""}`}
@@ -2078,7 +2041,7 @@ function AdminWorkspace() {
                           />
                           <span className="eyebrow">Option {index + 1}</span>
                         </label>
-                        {aiGenerationMode === "batch-main" ? (
+                        {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Question</span>
                             <input value={generated.question} onChange={(event) => updateGeneratedQuestion(index, "question", event.target.value)} />
@@ -2091,13 +2054,13 @@ function AdminWorkspace() {
                           onChange={(status) => updateGeneratedQuestionStatus(generated.draftId, status)}
                           name={`generated-question-status-${generated.draftId}`}
                         />
-                        {aiGenerationMode === "batch-main" ? (
+                        {isMultipleQuestionGeneration ? (
                           <label className="generated-edit-field">
                             <span>Answer</span>
                             <textarea rows={5} value={generated.answer} onChange={(event) => updateGeneratedQuestion(index, "answer", event.target.value)} />
                           </label>
                         ) : <p>{generated.answer}</p>}
-                        {aiGenerationMode === "batch-main" ? <>
+                        {isMultipleQuestionGeneration ? <>
                           <label className="generated-edit-field">
                             <span>Example</span>
                             <textarea rows={4} value={generated.example} onChange={(event) => updateGeneratedQuestion(index, "example", event.target.value)} />
@@ -2161,7 +2124,7 @@ function AdminWorkspace() {
                           </div>
                         )}
                         <div className="actions">
-                          {aiGenerationMode !== "batch-main" && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
+                          {!isMultipleQuestionGeneration && <button className="primary" type="button" onClick={() => editGeneratedQuestion(generated)}>
                             {selectedQuestion && editingQuestionId !== null ? "Review and update" : "Use in editor"}
                           </button>}
                           <button
@@ -2172,7 +2135,7 @@ function AdminWorkspace() {
                           >
                             {savingGeneratedQuestions[generated.draftId] ? "Saving..." : "Save"}
                           </button>
-                          {aiGenerationMode === "batch-main" && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
+                          {isMultipleQuestionGeneration && <button className="danger" type="button" onClick={() => removeGeneratedQuestion(index)}>Remove</button>}
                         </div>
                       </article>
                     ))}
@@ -2190,7 +2153,10 @@ function AdminWorkspace() {
                       </article>
                     )}
                     <div className="actions generated-actions">
-                      {aiGenerationMode === "batch-main" ? <>
+                      {isMultipleQuestionGeneration ? <>
+                        <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length !== 2} onClick={mergeSelectedQuestions}>
+                          {aiLoading ? "Merging..." : "Merge selected"}
+                        </button>
                         <button type="button" disabled={isAiBusy || selectedGeneratedIndexes.length === 0} onClick={saveSelectedGeneratedQuestions}>
                           {aiLoading ? "Saving..." : `Save selected (${selectedGeneratedIndexes.length})`}
                         </button>
@@ -2233,11 +2199,12 @@ function AdminWorkspace() {
         </button>
       )}
       <DeleteConfirmationDialog
+        key={deleteConfirmation ? `${deleteConfirmation.type}:${deleteConfirmation.type === "topic" ? deleteConfirmation.slug : deleteConfirmation.id}` : "closed"}
         confirmation={deleteConfirmation}
         loading={loading}
         onCancel={() => setDeleteConfirmation(null)}
         onConfirm={() => {
-          if (deleteConfirmation?.type === "page") void deletePage();
+          if (deleteConfirmation?.type === "topic") void deleteTopic();
           if (deleteConfirmation?.type === "question") void deleteQuestion(deleteConfirmation.id);
         }}
       />

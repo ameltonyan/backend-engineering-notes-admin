@@ -1,7 +1,7 @@
 export type StudyDay = {
   dayOfWeek: number;
   theme: string;
-  pageSlugs: string[];
+  topicSlugs: string[];
   minutes: number;
   note: string;
 };
@@ -14,10 +14,10 @@ export type WeeklyStudyProgram = {
   displayOrder: number;
 };
 
-export type StudyProgramPage = {
+export type StudyProgramTopic = {
   slug: string;
   title: string;
-  section: string;
+  category: string;
 };
 
 export type StudyProgramPayload = {

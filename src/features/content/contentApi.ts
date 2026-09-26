@@ -1,10 +1,10 @@
 import { apiRequest } from "../../services/apiClient";
-import type { Page, PageSummary, Section } from "./types";
+import type { Topic, TopicSummary, Category } from "./types";
 import type { Difficulty } from "../questions/types";
 
-export const listPages = () => apiRequest<PageSummary[]>("/api/admin/pages");
+export const listTopics = () => apiRequest<TopicSummary[]>("/api/admin/topics");
 
-export const listSections = () => apiRequest<Section[]>("/api/admin/sections");
+export const listCategories = () => apiRequest<Category[]>("/api/admin/categories");
 
-export const getPage = (slug: string, difficulty: Difficulty) =>
-  apiRequest<Page>(`/api/admin/pages/${encodeURIComponent(slug)}?difficulty=${encodeURIComponent(difficulty)}`);
+export const getTopic = (slug: string, difficulty: Difficulty) =>
+  apiRequest<Topic>(`/api/admin/topics/${encodeURIComponent(slug)}?difficulty=${encodeURIComponent(difficulty)}`);
