@@ -56,6 +56,23 @@ export default function QuestionTree({
   onGenerateDetails,
 }: QuestionTreeProps) {
   const [draggingQuestionId, setDraggingQuestionId] = useState<number | null>(null);
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+  const hierarchicalNumber = (question: Question) => {
+    const positions: number[] = [];
+    let currentQuestion: Question | undefined = question;
+    while (currentQuestion) {
+      const currentQuestionId = currentQuestion.id;
+      const parentQuestionId: number | null = currentQuestion.parentQuestionId;
+      const siblings = parentQuestionId === null
+        ? rootQuestions
+        : questions.filter((candidate) => candidate.parentQuestionId === parentQuestionId);
+      const index = siblings.findIndex((candidate) => candidate.id === currentQuestionId);
+      if (index < 0) break;
+      positions.unshift(index + 1);
+      currentQuestion = parentQuestionId === null ? undefined : questionById.get(parentQuestionId);
+    }
+    return positions.join(".");
+  };
   const renderQuestionNode = (question: Question): ReactNode => {
     if (!isVisible(question)) return null;
 
@@ -67,6 +84,7 @@ export default function QuestionTree({
     const isExpanded = expandedQuestions[question.id] !== false;
     const isSelected = selectedQuestionId === question.id;
     const childNodes = children.map(renderQuestionNode);
+    const questionLabel = hierarchicalNumber(question);
     const canMoveUp = siblingIndex > 0;
     const canMoveDown = siblingIndex >= 0 && siblingIndex < siblings.length - 1;
     const draggingQuestion = draggingQuestionId === null ? undefined : questions.find((candidate) => candidate.id === draggingQuestionId);
@@ -113,7 +131,7 @@ export default function QuestionTree({
             }}
           >
             <span className="tree-branch" aria-hidden="true">{children.length ? (isExpanded ? "▾" : "▸") : "·"}</span>
-            <span className="question-number" title={"Position " + (siblingIndex + 1) + " of " + siblings.length}>{siblingIndex + 1}</span>
+            <span className="question-number" title={"Question " + questionLabel}>{questionLabel}</span>
             <span className="tree-node-copy">
               <strong>{question.question}</strong>
               <span className="tree-meta">
