@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  getAiProviderModels,
   getAiProviderSettings,
   updateAiProvider,
   type AiProvider,
   type AiProviderConfiguration,
   type AiProviderSettings,
+  type AiProviderModels,
 } from "./aiProviderApi";
 
 type Props = {
@@ -16,6 +18,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
   const [settings, setSettings] = useState<AiProviderSettings | null>(null);
   const [draftProvider, setDraftProvider] = useState<AiProvider | null>(null);
   const [draftValues, setDraftValues] = useState<Partial<Record<AiProvider, Record<string, string>>>>({});
+  const [modelLists, setModelLists] = useState<Partial<Record<AiProvider, AiProviderModels & { error?: string }>>>({});
   const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -46,6 +49,22 @@ function AiProviderSelector({ onError, onChanged }: Props) {
   }, [onError]);
 
   useEffect(() => {
+    if (!isOpen || !draftProvider || draftProvider === "MOCK" || modelLists[draftProvider]) return;
+    let active = true;
+    getAiProviderModels(draftProvider)
+      .then((loaded) => {
+        if (active) setModelLists((current) => ({ ...current, [draftProvider]: loaded }));
+      })
+      .catch((error: unknown) => {
+        if (active) setModelLists((current) => ({ ...current, [draftProvider]: {
+          provider: draftProvider, models: [], description: "",
+          error: error instanceof Error ? error.message : "Could not load models.",
+        } }));
+      });
+    return () => { active = false; };
+  }, [isOpen, draftProvider, modelLists]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const closeWhenClickingOutside = (event: PointerEvent) => {
       if (event.target instanceof Node && !settingsRef.current?.contains(event.target)) setIsOpen(false);
@@ -68,6 +87,20 @@ function AiProviderSelector({ onError, onChanged }: Props) {
 
   const selectedProvider = settings?.providers.find((provider) => provider.id === draftProvider);
   const values = draftProvider ? draftValues[draftProvider] ?? {} : {};
+  const modelList = draftProvider ? modelLists[draftProvider] : undefined;
+  const currentModel = values.model ?? "";
+  const configuredModel = selectedProvider?.values.model
+    ?? selectedProvider?.settings.find((field) => field.key === "model")?.defaultValue ?? "";
+  const modelOptions = Array.from(new Set([configuredModel, currentModel, ...(modelList?.models ?? [])].filter(Boolean)));
+
+  const reloadModels = () => {
+    if (!draftProvider) return;
+    setModelLists((current) => {
+      const next = { ...current };
+      delete next[draftProvider];
+      return next;
+    });
+  };
 
   const changeValue = (key: string, value: string) => {
     if (!draftProvider) return;
@@ -135,15 +168,29 @@ function AiProviderSelector({ onError, onChanged }: Props) {
         {selectedProvider?.settings.length ? <>
           {selectedProvider.settings.map((field) => <label key={field.key} className="ai-settings-field">
             <span>{field.label}</span>
-            {field.type === "ENUM" ? <select value={values[field.key] ?? ""} disabled={saving}
+            {field.key === "model" ? <select value={currentModel} disabled={saving || !modelList}
+              onChange={(event) => changeValue(field.key, event.target.value)}>
+              {!currentModel && <option value="">{modelList ? "Choose a model" : "Loading models…"}</option>}
+              {modelOptions.map((model) => <option key={model} value={model}>
+                {model}{modelList && !modelList.models.includes(model) ? " (configured)" : ""}
+              </option>)}
+            </select> : field.type === "ENUM" ? <select value={values[field.key] ?? ""} disabled={saving}
               onChange={(event) => changeValue(field.key, event.target.value)}>
               {!field.required && <option value="">Use default{field.defaultValue ? ` (${field.defaultValue})` : ""}</option>}
               {field.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
-            </select> : <input value={values[field.key] ?? ""} disabled={saving} placeholder={field.key === "model" ? "Provider model ID" : field.label}
+            </select> : <input value={values[field.key] ?? ""} disabled={saving} placeholder={field.label}
               onChange={(event) => changeValue(field.key, event.target.value)} />}
-            {field.description && <small>{field.description}</small>}
+            {(field.key === "model" ? modelList?.description : field.description) &&
+              <small>{field.key === "model" ? modelList?.description : field.description}</small>}
           </label>)}
-          <p className="ai-settings-hint">Use the exact model ID available to your provider account.</p>
+          {modelList?.error ? <p className="ai-settings-hint" role="alert">
+            {modelList.error} Your configured model is still available.
+          </p> : modelList && !modelList.models.length ? <p className="ai-settings-hint">
+            No model suggestions are available. Your configured model is still available.
+          </p> : !modelList && <p className="ai-settings-hint" role="status">Loading model choices…</p>}
+          {modelList && <button type="button" disabled={saving} onClick={reloadModels}>
+            {modelList.error ? "Retry loading models" : "Refresh models"}
+          </button>}
         </> : settings && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
         {settings && <>
           <button className="primary ai-settings-save" type="button" disabled={saving} onClick={() => void saveProviderSettings()}>
