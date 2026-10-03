@@ -128,7 +128,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
         .filter(([, value]) => value));
       const updated = await updateAiProvider(provider.id, submitted);
       applySettings(updated);
-      setFeedback({ message: "AI settings saved", error: false });
+      setIsOpen(false);
       onChanged("AI settings saved");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save AI settings.";
