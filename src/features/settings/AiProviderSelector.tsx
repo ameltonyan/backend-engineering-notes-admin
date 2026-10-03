@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   getAiProviderSettings,
   updateAiProvider,
-  updateAiProviderSettings,
   type AiProvider,
   type AiProviderConfiguration,
   type AiProviderSettings,
@@ -15,7 +14,9 @@ type Props = {
 
 function AiProviderSelector({ onError, onChanged }: Props) {
   const [settings, setSettings] = useState<AiProviderSettings | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [draftProvider, setDraftProvider] = useState<AiProvider | null>(null);
+  const [draftValues, setDraftValues] = useState<Partial<Record<AiProvider, Record<string, string>>>>({});
+  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const settingsRef = useRef<HTMLElement>(null);
@@ -25,10 +26,12 @@ function AiProviderSelector({ onError, onChanged }: Props) {
 
   const applySettings = (next: AiProviderSettings) => {
     setSettings(next);
-    const provider = selected(next);
-    setValues(Object.fromEntries((provider?.settings ?? []).map((field) => [
-      field.key,
-      provider?.values[field.key] ?? field.defaultValue ?? "",
+    setDraftProvider(next.selectedProvider);
+    setDraftValues(Object.fromEntries(next.providers.map((provider) => [
+      provider.id,
+      Object.fromEntries(provider.settings.map((field) => [
+        field.key, provider.values[field.key] ?? field.defaultValue ?? "",
+      ])),
     ])));
   };
 
@@ -58,45 +61,49 @@ function AiProviderSelector({ onError, onChanged }: Props) {
     };
   }, [isOpen]);
 
-  const changeProvider = async (provider: AiProvider) => {
-    if (!settings || provider === settings.selectedProvider) return;
-    const previous = settings;
-    setSaving(true);
-    try {
-      const updated = await updateAiProvider(provider);
-      applySettings(updated);
-      onChanged(`AI provider changed to ${selected(updated)?.label ?? updated.selectedProvider}`);
-    } catch (error) {
-      applySettings(previous);
-      onError(error instanceof Error ? error.message : "Could not change the AI provider.");
-    } finally {
-      setSaving(false);
-    }
+  const changeProvider = (provider: AiProvider) => {
+    setDraftProvider(provider);
+    setFeedback(null);
+  };
+
+  const selectedProvider = settings?.providers.find((provider) => provider.id === draftProvider);
+  const values = draftProvider ? draftValues[draftProvider] ?? {} : {};
+
+  const changeValue = (key: string, value: string) => {
+    if (!draftProvider) return;
+    setDraftValues((current) => ({ ...current, [draftProvider]: { ...current[draftProvider], [key]: value } }));
+    setFeedback(null);
   };
 
   const saveProviderSettings = async () => {
-    if (!settings) return;
-    const provider = selected(settings);
+    if (!settings || saving) return;
+    const provider = selectedProvider;
     if (!provider || provider.settings.some((field) => field.required && !values[field.key]?.trim())) {
+      setFeedback({ message: "Complete all required AI settings before saving.", error: true });
       onError("Complete all required AI settings before saving.");
       return;
     }
     setSaving(true);
+    setFeedback(null);
+    onError("");
+    onChanged("");
     try {
       const submitted = Object.fromEntries(provider.settings
         .map((field) => [field.key, values[field.key]?.trim() ?? ""])
         .filter(([, value]) => value));
-      const updated = await updateAiProviderSettings(provider.id, submitted);
+      const updated = await updateAiProvider(provider.id, submitted);
       applySettings(updated);
+      setFeedback({ message: "AI settings saved", error: false });
       onChanged("AI settings saved");
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Could not save AI settings.");
+      const message = error instanceof Error ? error.message : "Could not save AI settings.";
+      setFeedback({ message, error: true });
+      onError(message);
     } finally {
       setSaving(false);
     }
   };
 
-  const selectedProvider = settings ? selected(settings) : undefined;
   const providerResources = selectedProvider?.id === "OPENAI"
     ? { documentation: "https://developers.openai.com/api/docs/models", pricing: "https://developers.openai.com/api/docs/pricing" }
     : selectedProvider?.id === "ZAI"
@@ -107,7 +114,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
     <section className="ai-settings" ref={settingsRef} aria-label="AI settings">
       <button className="ai-settings-trigger" type="button" aria-expanded={isOpen} aria-haspopup="dialog"
         onClick={() => setIsOpen((current) => !current)}>
-        <span>{selectedProvider?.label ?? "AI settings"}</span>
+        <span>{settings ? selected(settings)?.label ?? "AI settings" : "AI settings"}</span>
         <span className="ai-settings-gear" aria-hidden="true">⚙</span>
       </button>
       {isOpen && <div className="ai-settings-popover" role="dialog" aria-label="AI provider settings">
@@ -117,8 +124,8 @@ function AiProviderSelector({ onError, onChanged }: Props) {
         </div>
         <label className="provider-selector">
           <span>AI provider</span>
-          <select aria-label="Active AI provider" value={settings?.selectedProvider ?? ""} disabled={!settings || saving}
-            onChange={(event) => void changeProvider(event.target.value as AiProvider)}>
+          <select aria-label="AI provider" value={draftProvider ?? ""} disabled={!settings || saving}
+            onChange={(event) => changeProvider(event.target.value as AiProvider)}>
             {!settings && <option value="">Loading…</option>}
             {settings?.providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.configured}>
               {provider.label}{provider.configured ? "" : " — not configured"}
@@ -129,17 +136,22 @@ function AiProviderSelector({ onError, onChanged }: Props) {
           {selectedProvider.settings.map((field) => <label key={field.key} className="ai-settings-field">
             <span>{field.label}</span>
             {field.type === "ENUM" ? <select value={values[field.key] ?? ""} disabled={saving}
-              onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}>
+              onChange={(event) => changeValue(field.key, event.target.value)}>
+              {!field.required && <option value="">Use default{field.defaultValue ? ` (${field.defaultValue})` : ""}</option>}
               {field.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
             </select> : <input value={values[field.key] ?? ""} disabled={saving} placeholder={field.key === "model" ? "Provider model ID" : field.label}
-              onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} />}
+              onChange={(event) => changeValue(field.key, event.target.value)} />}
             {field.description && <small>{field.description}</small>}
           </label>)}
+          <p className="ai-settings-hint">Use the exact model ID available to your provider account.</p>
+        </> : settings && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
+        {settings && <>
           <button className="primary ai-settings-save" type="button" disabled={saving} onClick={() => void saveProviderSettings()}>
             {saving ? "Saving…" : "Save AI settings"}
           </button>
-          <p className="ai-settings-hint">Use the exact model ID available to your provider account.</p>
-        </> : settings && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
+          <p className="ai-settings-hint">Provider and setting changes apply when you save.</p>
+        </>}
+        {feedback && <p className="ai-settings-hint" role={feedback.error ? "alert" : "status"}>{feedback.message}</p>}
         {providerResources && <div className="ai-settings-links">
           <a href={providerResources.documentation} target="_blank" rel="noreferrer">Provider docs ↗</a>
           <a href={providerResources.pricing} target="_blank" rel="noreferrer">Models & pricing ↗</a>
