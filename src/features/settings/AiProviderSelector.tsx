@@ -167,8 +167,15 @@ function AiProviderSelector({ onError, onChanged }: Props) {
         </label>
         {selectedProvider?.settings.length ? <>
           {selectedProvider.settings.map((field) => <label key={field.key} className="ai-settings-field">
-            <span>{field.label}</span>
+            <span className="ai-settings-field-heading">
+              <span>{field.label}</span>
+              {field.key === "model" && !modelList && <span className="ai-settings-loading" role="status">
+                <span className="ai-settings-spinner" aria-hidden="true" />
+                Loading…
+              </span>}
+            </span>
             {field.key === "model" ? <select value={currentModel} disabled={saving || !modelList}
+              aria-label={field.label} aria-busy={!modelList}
               onChange={(event) => changeValue(field.key, event.target.value)}>
               {!currentModel && <option value="">{modelList ? "Choose a model" : "Loading models…"}</option>}
               {modelOptions.map((model) => <option key={model} value={model}>
@@ -187,7 +194,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
             {modelList.error} Your configured model is still available.
           </p> : modelList && !modelList.models.length ? <p className="ai-settings-hint">
             No model suggestions are available. Your configured model is still available.
-          </p> : !modelList && <p className="ai-settings-hint" role="status">Loading model choices…</p>}
+          </p> : null}
           {modelList && <button type="button" disabled={saving} onClick={reloadModels}>
             {modelList.error ? "Retry loading models" : "Refresh models"}
           </button>}

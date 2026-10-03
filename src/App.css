@@ -632,6 +632,21 @@ select:disabled {
   text-transform: uppercase;
 }
 
+.ai-settings-field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-settings-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .ai-settings-field input,
 .ai-settings-field select {
   width: 100%;
@@ -2090,7 +2105,8 @@ select:disabled {
   font: 12px 'DM Mono', monospace;
 }
 
-.answer-improvement-spinner {
+.answer-improvement-spinner,
+.ai-settings-spinner {
   width: 12px;
   height: 12px;
   border: 2px solid #b9d5c4;
@@ -2102,6 +2118,12 @@ select:disabled {
 @keyframes answer-improvement-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-settings-spinner {
+    animation: none;
   }
 }
 
