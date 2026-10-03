@@ -23,6 +23,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
   const [saving, setSaving] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const settingsRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const selected = (next: AiProviderSettings): AiProviderConfiguration | undefined =>
     next.providers.find((provider) => provider.id === next.selectedProvider);
@@ -110,6 +111,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
 
   const saveProviderSettings = async () => {
     if (!settings || saving) return;
+    if (!formRef.current?.reportValidity()) return;
     const provider = selectedProvider;
     if (!provider || provider.settings.some((field) => field.required && !values[field.key]?.trim())) {
       setFeedback({ message: "Complete all required AI settings before saving.", error: true });
@@ -150,7 +152,8 @@ function AiProviderSelector({ onError, onChanged }: Props) {
         <span>{settings ? selected(settings)?.label ?? "AI settings" : "AI settings"}</span>
         <span className="ai-settings-gear" aria-hidden="true">⚙</span>
       </button>
-      {isOpen && <div className="ai-settings-popover" role="dialog" aria-label="AI provider settings">
+      {isOpen && <form ref={formRef} className="ai-settings-popover" role="dialog" aria-label="AI provider settings"
+        onSubmit={(event) => { event.preventDefault(); void saveProviderSettings(); }}>
         <div className="ai-settings-popover-heading">
           <div><p className="eyebrow">AI settings</p><strong>{selectedProvider?.label ?? "Loading settings…"}</strong></div>
           <button className="ai-settings-close" type="button" onClick={() => setIsOpen(false)} aria-label="Close AI settings">×</button>
@@ -175,6 +178,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
               </span>}
             </span>
             {field.key === "model" ? <select value={currentModel} disabled={saving || !modelList}
+              required={field.required}
               aria-label={field.label} aria-busy={!modelList}
               onChange={(event) => changeValue(field.key, event.target.value)}>
               {!currentModel && <option value="">{modelList ? "Choose a model" : "Loading models…"}</option>}
@@ -182,25 +186,29 @@ function AiProviderSelector({ onError, onChanged }: Props) {
                 {model}{modelList && !modelList.models.includes(model) ? " (configured)" : ""}
               </option>)}
             </select> : field.type === "ENUM" ? <select value={values[field.key] ?? ""} disabled={saving}
+              required={field.required}
               onChange={(event) => changeValue(field.key, event.target.value)}>
               {!field.required && <option value="">Use default{field.defaultValue ? ` (${field.defaultValue})` : ""}</option>}
               {field.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
             </select> : <input value={values[field.key] ?? ""} disabled={saving} placeholder={field.label}
+              type={field.type === "NUMBER" || field.type === "INTEGER" ? "number" : "text"}
+              min={field.minimum ?? undefined} max={field.maximum ?? undefined}
+              step={field.type === "INTEGER" ? 1 : "any"} required={field.required}
               onChange={(event) => changeValue(field.key, event.target.value)} />}
             {(field.key === "model" ? modelList?.description : field.description) &&
               <small>{field.key === "model" ? modelList?.description : field.description}</small>}
           </label>)}
           {modelList?.error ? <p className="ai-settings-hint" role="alert">
-            {modelList.error} Your configured model is still available.
+            {modelList.error}{configuredModel ? " Your saved model is still available." : " Retry loading models to choose a model."}
           </p> : modelList && !modelList.models.length ? <p className="ai-settings-hint">
-            No model suggestions are available. Your configured model is still available.
+            No model suggestions are available.{configuredModel ? " Your saved model is still available." : " Try refreshing the model list."}
           </p> : null}
           {modelList && <button type="button" disabled={saving} onClick={reloadModels}>
             {modelList.error ? "Retry loading models" : "Refresh models"}
           </button>}
         </> : settings && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
         {settings && <>
-          <button className="primary ai-settings-save" type="button" disabled={saving} onClick={() => void saveProviderSettings()}>
+          <button className="primary ai-settings-save" type="submit" disabled={saving}>
             {saving ? "Saving…" : "Save AI settings"}
           </button>
           <p className="ai-settings-hint">Provider and setting changes apply when you save.</p>
@@ -210,7 +218,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
           <a href={providerResources.documentation} target="_blank" rel="noreferrer">Provider docs ↗</a>
           <a href={providerResources.pricing} target="_blank" rel="noreferrer">Models & pricing ↗</a>
         </div>}
-      </div>}
+      </form>}
     </section>
   );
 }

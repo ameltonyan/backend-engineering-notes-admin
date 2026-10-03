@@ -1,7 +1,7 @@
 import { apiRequest } from "../../services/apiClient";
 
 export type AiProvider = "MOCK" | "OPENAI" | "ZAI";
-export type AiProviderSettingType = "STRING" | "ENUM";
+export type AiProviderSettingType = "STRING" | "ENUM" | "NUMBER" | "INTEGER";
 
 export type AiProviderSettingDefinition = {
   key: string;
@@ -11,6 +11,8 @@ export type AiProviderSettingDefinition = {
   allowedValues: string[];
   description: string;
   defaultValue: string | null;
+  minimum: number | null;
+  maximum: number | null;
 };
 
 export type AiProviderConfiguration = {
