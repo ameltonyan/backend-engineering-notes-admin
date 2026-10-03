@@ -20,18 +20,12 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
   credentials = readCredentials(),
-  timeoutMs?: number,
 ): Promise<T> {
   let response: Response;
-  const controller = timeoutMs ? new AbortController() : undefined;
-  const timeoutId = timeoutMs
-    ? window.setTimeout(() => controller?.abort(), timeoutMs)
-    : undefined;
 
   try {
     response = await fetch(`${apiBaseUrl}${path}`, {
       ...options,
-      ...(controller ? { signal: controller.signal } : {}),
       headers: {
         "Content-Type": "application/json",
         ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
@@ -39,18 +33,10 @@ export async function apiRequest<T>(
       },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiRequestError(
-        "The AI request took too long to respond. Try again or choose a lower reasoning effort.",
-        408,
-      );
-    }
     throw new ApiRequestError(
       "The API is unavailable. Check that the backend is running and try again.",
       0,
     );
-  } finally {
-    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
