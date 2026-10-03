@@ -131,6 +131,7 @@ function AdminWorkspace() {
   const [revealedCodeSnippets, setRevealedCodeSnippets] = useState<Record<number, boolean>>({});
   const [revealedTags, setRevealedTags] = useState<Record<number, boolean>>({});
   const [selectedQuestionId, setSelectedQuestionId] = useState<number | null>(null);
+  const [reorderingQuestionId, setReorderingQuestionId] = useState<number | null>(null);
   const [isQuestionFormOpen, setIsQuestionFormOpen] = useState(false);
   const [questionFieldError, setQuestionFieldError] = useState("");
   const [topicFieldError, setTopicFieldError] = useState("");
@@ -176,6 +177,10 @@ function AdminWorkspace() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const aiPanelRef = useRef<HTMLElement | null>(null);
   const generatedDraftSequence = useRef(0);
+  const questionOrderSaving = useRef(false);
+  const activeQuestionEditor = useRef<number | null>(null);
+
+  useEffect(() => { activeQuestionEditor.current = editingQuestionId; }, [editingQuestionId]);
 
   const getErrorMessage = (err: unknown) =>
     err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -1238,27 +1243,57 @@ function AdminWorkspace() {
     }
   };
 
-  const persistQuestionOrder = async (siblings: Question[], reorderedSiblings: Question[]) => {
-    if (!topic) return;
+  const persistQuestionOrder = async (siblings: Question[], reorderedSiblings: Question[], movedQuestionId: number) => {
+    if (!topic || questionOrderSaving.current) return;
+    questionOrderSaving.current = true;
+    const previousTopic = topic;
     const siblingIds = new Set(siblings.map((question) => question.id));
     const reorderedQuestionIds = [
       ...reorderedSiblings.map((question) => question.id),
       ...orderedQuestions.filter((question) => !siblingIds.has(question.id)).map((question) => question.id),
     ];
-    setLoading(true);
+    const newOrders = new Map(reorderedSiblings.map((question, index) => [question.id, index]));
+    const optimisticTopic = {
+      ...topic,
+      questions: topic.questions.map((question) => newOrders.has(question.id)
+        ? { ...question, displayOrder: newOrders.get(question.id)! } : question),
+    };
+    const previousEditorOrder = editingQuestionId === null ? undefined : questionById.get(editingQuestionId)?.displayOrder;
+    const nextEditorOrder = editingQuestionId === null ? undefined : newOrders.get(editingQuestionId);
+    if (nextEditorOrder !== undefined) {
+      setQuestionForm((current) => current.displayOrder === previousEditorOrder
+        ? { ...current, displayOrder: nextEditorOrder } : current);
+    }
+    setTopic(optimisticTopic);
+    setReorderingQuestionId(movedQuestionId);
     setError("");
     setNotice("");
+    let orderSaved = false;
     try {
       await request("/api/admin/topics/" + encodeURIComponent(topic.slug) + "/questions/order", {
         method: "PUT",
         body: JSON.stringify({ questionIds: reorderedQuestionIds }),
       });
-      await loadTopic(topic.slug);
+      orderSaved = true;
+      // Refresh data without resetting selection, disclosures, or an open editor.
+      const refreshed = await getTopic(topic.slug, selectedDifficulty);
+      setTopic((current) => current === optimisticTopic ? refreshed : current);
       setNotice("Question order saved");
     } catch (err) {
-      setError(getErrorMessage(err));
+      if (!orderSaved) {
+        setTopic((current) => current === optimisticTopic ? previousTopic : current);
+        if (activeQuestionEditor.current === editingQuestionId && previousEditorOrder !== undefined) {
+          setQuestionForm((current) => current.displayOrder === nextEditorOrder
+            ? { ...current, displayOrder: previousEditorOrder } : current);
+        }
+        setError("Could not save question order. " + getErrorMessage(err));
+      } else {
+        // A failed refresh must not undo a reorder already accepted by the API.
+        setError("Question order was saved, but the topic could not be refreshed. " + getErrorMessage(err));
+      }
     } finally {
-      setLoading(false);
+      questionOrderSaving.current = false;
+      setReorderingQuestionId(null);
     }
   };
 
@@ -1273,7 +1308,7 @@ function AdminWorkspace() {
     const reorderedSiblings = [...siblings];
     const [movedQuestion] = reorderedSiblings.splice(currentIndex, 1);
     reorderedSiblings.splice(targetIndex, 0, movedQuestion);
-    await persistQuestionOrder(siblings, reorderedSiblings);
+    await persistQuestionOrder(siblings, reorderedSiblings, questionId);
   };
 
   const reorderQuestion = async (questionId: number, targetQuestionId: number, placement: "before" | "after") => {
@@ -1291,7 +1326,7 @@ function AdminWorkspace() {
     const reorderedSiblings = [...remainingSiblings];
     reorderedSiblings.splice(insertionIndex, 0, question);
     if (reorderedSiblings.every((item, index) => item.id === siblings[index]?.id)) return;
-    await persistQuestionOrder(siblings, reorderedSiblings);
+    await persistQuestionOrder(siblings, reorderedSiblings, questionId);
   };
 
   const moveCategory = async (categoryId: number, direction: -1 | 1) => {
@@ -1719,6 +1754,7 @@ function AdminWorkspace() {
                   questions={orderedQuestions}
                   rootQuestions={rootQuestions}
                   selectedQuestionId={selectedQuestionId}
+                  reorderingQuestionId={reorderingQuestionId}
                   expandedQuestions={expandedQuestions}
                   revealedAnswers={revealedAnswers}
                   revealedExamples={revealedExamples}

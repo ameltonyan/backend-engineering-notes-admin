@@ -1,11 +1,13 @@
 import type { Question } from "../../content/types";
 import { useState, type ReactNode } from "react";
 import { questionKind } from "../questionUtils";
+import { useQuestionOrderAnimation } from "../useQuestionOrderAnimation";
 
 type QuestionTreeProps = {
   questions: Question[];
   rootQuestions: Question[];
   selectedQuestionId: number | null;
+  reorderingQuestionId: number | null;
   expandedQuestions: Record<number, boolean>;
   revealedAnswers: Record<number, boolean>;
   revealedExamples: Record<number, boolean>;
@@ -33,6 +35,7 @@ export default function QuestionTree({
   questions,
   rootQuestions,
   selectedQuestionId,
+  reorderingQuestionId,
   expandedQuestions,
   revealedAnswers,
   revealedExamples,
@@ -56,6 +59,11 @@ export default function QuestionTree({
   onGenerateDetails,
 }: QuestionTreeProps) {
   const [draggingQuestionId, setDraggingQuestionId] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ questionId: number; placement: "before" | "after" } | null>(null);
+  const { treeRef, capturePositions } = useQuestionOrderAnimation(
+    questions.map((question) => `${question.id}:${question.parentQuestionId}`).join(","),
+  );
+  const isReordering = reorderingQuestionId !== null;
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const hierarchicalNumber = (question: Question) => {
     const positions: number[] = [];
@@ -94,27 +102,47 @@ export default function QuestionTree({
     return (
       <article
         id={"question-node-" + question.id}
-        className={["tree-node", "depth-" + Math.min(question.depth, 5), isSelected ? "selected" : "", draggingQuestionId === question.id ? "dragging" : "", canDropHere ? "drop-target" : ""].filter(Boolean).join(" ")}
+        data-question-id={question.id}
+        className={["tree-node", "depth-" + Math.min(question.depth, 5), isSelected ? "selected" : "", draggingQuestionId === question.id ? "dragging" : "",
+          dropTarget?.questionId === question.id ? `drop-target drop-${dropTarget.placement}` : "",
+          reorderingQuestionId === question.id ? "moving" : ""].filter(Boolean).join(" ")}
         key={question.id}
-        draggable
+        draggable={!isReordering}
         onDragStart={(event) => {
+          event.stopPropagation();
           setDraggingQuestionId(question.id);
+          setDropTarget(null);
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", String(question.id));
         }}
         onDragOver={(event) => {
-          if (!canDropHere) return;
+          event.stopPropagation();
+          if (!canDropHere || isReordering) {
+            setDropTarget(null);
+            return;
+          }
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const placement = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+          setDropTarget((current) => current?.questionId === question.id && current.placement === placement
+            ? current : { questionId: question.id, placement });
+        }}
+        onDragLeave={(event) => {
+          if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+          setDropTarget((current) => current?.questionId === question.id ? null : current);
         }}
         onDrop={(event) => {
-          if (!canDropHere || draggingQuestionId === null) return;
+          event.stopPropagation();
+          if (!canDropHere || draggingQuestionId === null || isReordering) return;
           event.preventDefault();
           const bounds = event.currentTarget.getBoundingClientRect();
+          capturePositions();
           onReorder(draggingQuestionId, question.id, event.clientY < bounds.top + bounds.height / 2 ? "before" : "after");
           setDraggingQuestionId(null);
+          setDropTarget(null);
         }}
-        onDragEnd={() => setDraggingQuestionId(null)}
+        onDragEnd={(event) => { event.stopPropagation(); setDraggingQuestionId(null); setDropTarget(null); }}
       >
         <div className="tree-node-row">
           <button
@@ -140,8 +168,9 @@ export default function QuestionTree({
             </span>
           </button>
           <div className="question-order-controls" aria-label={"Order for " + question.question}>
-            <button className="question-order-button" type="button" title={canMoveUp ? "Move up" : "Already first in this group"} aria-label="Move question up" disabled={!canMoveUp} onClick={() => onMove(question.id, -1)}>↑</button>
-            <button className="question-order-button" type="button" title={canMoveDown ? "Move down" : "Already last in this group"} aria-label="Move question down" disabled={!canMoveDown} onClick={() => onMove(question.id, 1)}>↓</button>
+            {reorderingQuestionId === question.id && <span className="question-order-progress" role="status">Saving…</span>}
+            <button className="question-order-button" type="button" title={canMoveUp ? "Move up" : "Already first in this group"} aria-label="Move question up" disabled={!canMoveUp || isReordering} onClick={() => { capturePositions(); onMove(question.id, -1); }}>↑</button>
+            <button className="question-order-button" type="button" title={canMoveDown ? "Move down" : "Already last in this group"} aria-label="Move question down" disabled={!canMoveDown || isReordering} onClick={() => { capturePositions(); onMove(question.id, 1); }}>↓</button>
           </div>
         </div>
         {isSelected && (
@@ -190,5 +219,5 @@ export default function QuestionTree({
     );
   };
 
-  return <div className="question-tree" aria-label="Interview question hierarchy">{rootQuestions.map(renderQuestionNode)}</div>;
+  return <div className="question-tree" ref={treeRef} aria-label="Interview question hierarchy" aria-busy={isReordering}>{rootQuestions.map(renderQuestionNode)}</div>;
 }
