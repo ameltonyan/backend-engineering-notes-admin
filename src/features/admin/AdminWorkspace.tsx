@@ -639,7 +639,7 @@ function AdminWorkspace() {
             .map((item) => item.title)
             .slice(0, 50),
         }),
-      }, undefined, 180_000)) as { topics: GeneratedTopicProposal[]; usage?: AiUsage };
+      })) as { topics: GeneratedTopicProposal[]; usage?: AiUsage };
       const proposals = result.topics;
       setGeneratedTopicProposals(proposals);
       setSelectedTopicProposalIndexes(proposals.map((_, index) => index));
@@ -752,7 +752,7 @@ function AdminWorkspace() {
           mode: detailGenerationMode,
           guidance: detailGenerationGuidance.trim() || null,
         }),
-      }, undefined, 180_000)) as { example?: string; codeSnippet?: string; usage?: AiUsage; generation: AiGenerationMetadata };
+      })) as { example?: string; codeSnippet?: string; usage?: AiUsage; generation: AiGenerationMetadata };
       const example = result.example;
       if (detailGenerationMode !== "CODE_ONLY" && !example?.trim()) {
         throw new Error("The AI did not return an example.");
@@ -959,7 +959,7 @@ function AdminWorkspace() {
       const result = (await request(path, {
         method: "POST",
         body: JSON.stringify(payload),
-      }, undefined, 200_000)) as GeneratedQuestionsResult;
+      })) as GeneratedQuestionsResult;
       setGeneratedQuestions(createGeneratedDrafts(result.questions, result.generation));
       setSavedGeneratedQuestionIds({});
       setMergedQuestion(null);
@@ -1029,7 +1029,7 @@ function AdminWorkspace() {
             return { question, answer, example, codeSnippet, difficulty, type, tags };
           }),
         }),
-      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      })) as GeneratedQuestionsResult;
       setMergedQuestion(createGeneratedDrafts(result.questions, result.generation)[0] ?? null);
       setSelectedGeneratedIndexes([]);
       setAiUsage(result.usage ?? null);
@@ -1127,7 +1127,7 @@ function AdminWorkspace() {
       const result = (await request("/api/admin/ai/questions/improve", {
         method: "POST",
         body: JSON.stringify({ ...draftRequest, ...improvement, answerOnly: true }),
-      }, undefined, 180_000)) as GeneratedQuestionsResult;
+      })) as GeneratedQuestionsResult;
       const improved = result.questions[0];
       if (!improved) throw new Error("The AI did not return an improved answer.");
       setGeneratedQuestions((current) => current.map((item) =>
