@@ -91,7 +91,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
   const currentModel = values.model ?? "";
   const configuredModel = selectedProvider?.values.model
     ?? selectedProvider?.settings.find((field) => field.key === "model")?.defaultValue ?? "";
-  const modelOptions = Array.from(new Set([configuredModel, currentModel, ...(modelList?.models ?? [])].filter(Boolean)));
+  const modelOptions = Array.from(new Set([...(modelList?.models ?? []), configuredModel, currentModel].filter(Boolean)));
 
   const reloadModels = () => {
     if (!draftProvider) return;
