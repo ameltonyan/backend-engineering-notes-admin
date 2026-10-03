@@ -26,13 +26,22 @@ export type AiProviderSettings = {
   providers: AiProviderConfiguration[];
 };
 
+export type AiProviderModels = {
+  provider: AiProvider;
+  models: string[];
+  description: string;
+};
+
+export const getAiProviderModels = (provider: AiProvider) =>
+  apiRequest<AiProviderModels>(`/api/admin/ai/provider/${provider}/models`);
+
 export const getAiProviderSettings = () =>
   apiRequest<AiProviderSettings>("/api/admin/ai/provider");
 
-export const updateAiProvider = (provider: AiProvider) =>
+export const updateAiProvider = (provider: AiProvider, settings?: Record<string, string>) =>
   apiRequest<AiProviderSettings>("/api/admin/ai/provider", {
     method: "PUT",
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, settings }),
   });
 
 export const updateAiProviderSettings = (provider: AiProvider, settings: Record<string, string>) =>
