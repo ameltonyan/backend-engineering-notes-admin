@@ -6,6 +6,7 @@ import LoginPage from "../auth/LoginPage";
 import { clearCredentials, readCredentials, saveCredentials } from "../auth/authStorage";
 import ContentLibrary from "../content/ContentLibrary";
 import CategoryCreateDialog from "../content/CategoryCreateDialog";
+import CategoryNameInput from "../content/CategoryNameInput";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
@@ -1631,21 +1632,17 @@ function AdminWorkspace() {
                 </div>
               </div>
               <form className="plan-form" onSubmit={generateTopicPlan}>
-                <label>
-                  Category
-                  <input id="topic-plan-category-name" list="topic-plan-categories" value={topicPlanCategoryName} onChange={(event) => {
-                    const categoryName = event.target.value;
+                <div className="topic-plan-category-field">
+                  <label htmlFor="topic-plan-category-name">Category</label>
+                  <CategoryNameInput id="topic-plan-category-name" value={topicPlanCategoryName} categories={categories} onChange={(categoryName) => {
                     setTopicPlanCategoryName(categoryName);
                     setTopicPlanCategory(categories.find((category) =>
                       category.name.trim().toLowerCase() === categoryName.trim().toLowerCase(),
                     ) ?? null);
-                  }} placeholder="e.g. Java" maxLength={100} required />
-                  <datalist id="topic-plan-categories">
-                    {categories.map((category) => <option key={category.id} value={category.name} />)}
-                  </datalist>
+                  }} />
                   <small className="field-hint">Choose an existing category or enter a new name. A new category is created when you save selected topics.</small>
                   <small className="field-hint">Topics cover shared subjects across all question difficulty levels, from foundations to advanced areas.</small>
-                </label>
+                </div>
                 <label>
                   Topic guidance (optional)
                   <textarea
