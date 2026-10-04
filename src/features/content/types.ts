@@ -7,6 +7,7 @@ export type TopicSummary = {
   category: string;
   categoryId: number;
   displayOrder: number;
+  publicVisible: boolean;
 };
 
 export type Category = {
@@ -40,6 +41,7 @@ export type TopicForm = {
   description: string;
   categoryId: number | null;
   displayOrder: number;
+  publicVisible: boolean;
 };
 
 export type QuestionForm = {

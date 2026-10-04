@@ -30,7 +30,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
 
   const applySettings = (next: AiProviderSettings) => {
     setSettings(next);
-    setDraftProvider(next.selectedProvider);
+    setDraftProvider(selected(next)?.id ?? null);
     setDraftValues(Object.fromEntries(next.providers.map((provider) => [
       provider.id,
       Object.fromEntries(provider.settings.map((field) => [
@@ -155,7 +155,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
       {isOpen && <form ref={formRef} className="ai-settings-popover" role="dialog" aria-label="AI provider settings"
         onSubmit={(event) => { event.preventDefault(); void saveProviderSettings(); }}>
         <div className="ai-settings-popover-heading">
-          <div><p className="eyebrow">AI settings</p><strong>{selectedProvider?.label ?? "Loading settings…"}</strong></div>
+          <div><p className="eyebrow">AI settings</p><strong>{selectedProvider?.label ?? (settings ? "Choose an AI provider" : "Loading settings…")}</strong></div>
           <button className="ai-settings-close" type="button" onClick={() => setIsOpen(false)} aria-label="Close AI settings">×</button>
         </div>
         <label className="provider-selector">
@@ -163,6 +163,7 @@ function AiProviderSelector({ onError, onChanged }: Props) {
           <select aria-label="AI provider" value={draftProvider ?? ""} disabled={!settings || saving}
             onChange={(event) => changeProvider(event.target.value as AiProvider)}>
             {!settings && <option value="">Loading…</option>}
+            {settings && !draftProvider && <option value="">Choose a provider</option>}
             {settings?.providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.configured}>
               {provider.label}{provider.configured ? "" : " — not configured"}
             </option>)}
@@ -206,9 +207,12 @@ function AiProviderSelector({ onError, onChanged }: Props) {
           {modelList && <button type="button" disabled={saving} onClick={reloadModels}>
             {modelList.error ? "Retry loading models" : "Refresh models"}
           </button>}
-        </> : settings && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
+        </> : selectedProvider?.id === "MOCK" && <p className="ai-settings-hint">The local mock provider uses its built-in static response and has no model settings.</p>}
+        {settings && !selected(settings) && <p className="ai-settings-hint" role="alert">
+          The saved provider is unavailable in this environment. Choose and save a real AI provider before generating content.
+        </p>}
         {settings && <>
-          <button className="primary ai-settings-save" type="submit" disabled={saving}>
+          <button className="primary ai-settings-save" type="submit" disabled={saving || !selectedProvider}>
             {saving ? "Saving…" : "Save AI settings"}
           </button>
           <p className="ai-settings-hint">Provider and setting changes apply when you save.</p>
