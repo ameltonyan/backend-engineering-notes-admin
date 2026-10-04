@@ -1,5 +1,14 @@
 import type { Question } from "../content/types";
 
+export function matchesQuestionGeneration(question: Question, provider: string, model: string): boolean {
+  const generation = question.aiGeneration;
+  if (provider === "NONE") {
+    return !generation;
+  }
+  return (provider === "ALL" || generation?.provider === provider)
+    && (model === "ALL" || generation?.model === model);
+}
+
 export function questionKind(depth: number) {
   return depth === 0 ? "Main question" : depth === 1 ? "Follow-up" : "Deep follow-up";
 }

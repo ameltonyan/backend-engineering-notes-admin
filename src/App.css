@@ -1818,6 +1818,15 @@ select:disabled {
   flex: 1 1 260px;
 }
 
+.question-generation-filter {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.question-generation-filter select {
+  width: 100%;
+}
+
 .question-status-filter {
   display: flex;
   flex-wrap: wrap;

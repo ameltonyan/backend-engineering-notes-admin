@@ -9,7 +9,7 @@ import CategoryCreateDialog from "../content/CategoryCreateDialog";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
-import { descendantCount, questionPreview } from "../questions/questionUtils";
+import { descendantCount, matchesQuestionGeneration, questionPreview } from "../questions/questionUtils";
 import QuestionStatusSelector from "../questions/components/QuestionStatusSelector";
 import QuestionTree from "../questions/components/QuestionTree";
 import { QUESTION_STATUS_OPTIONS } from "../questions/questionStatus";
@@ -126,6 +126,8 @@ function AdminWorkspace() {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>(readCollapsedCategories);
   const [questionSearch, setQuestionSearch] = useState("");
   const [questionStatusFilter, setQuestionStatusFilter] = useState<QuestionStatus | "ALL">("ALL");
+  const [questionProviderFilter, setQuestionProviderFilter] = useState("ALL");
+  const [questionModelFilter, setQuestionModelFilter] = useState("ALL");
   const [expandedQuestions, setExpandedQuestions] = useState<Record<number, boolean>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
   const [revealedExamples, setRevealedExamples] = useState<Record<number, boolean>>({});
@@ -271,8 +273,16 @@ function AdminWorkspace() {
   const questionById = new Map(orderedQuestions.map((question) => [question.id, question]));
   const selectedQuestion = selectedQuestionId ? questionById.get(selectedQuestionId) : undefined;
   const isDetailsGeneration = detailsGenerationTargetId !== null && detailsGenerationTargetId === editingQuestionId;
+  const questionProviders = [...new Set(orderedQuestions.flatMap((question) =>
+    question.aiGeneration ? [question.aiGeneration.provider] : [],
+  ))].sort();
+  const questionModels = [...new Set(orderedQuestions.flatMap((question) =>
+    question.aiGeneration && (questionProviderFilter === "ALL" || question.aiGeneration.provider === questionProviderFilter)
+      ? [question.aiGeneration.model] : [],
+  ))].sort();
   const matchesQuestionFilters = (question: Question) =>
     (questionStatusFilter === "ALL" || question.status === questionStatusFilter)
+    && matchesQuestionGeneration(question, questionProviderFilter, questionModelFilter)
     && (!normalizedQuestionSearch || [question.question, question.answer].some((value) =>
       value.toLowerCase().includes(normalizedQuestionSearch),
     ));
@@ -419,8 +429,12 @@ function AdminWorkspace() {
   }, [credentials]);
 
   useEffect(() => {
-    if (!credentials || !selectedSlug) return;
+    if (!credentials || !selectedSlug) {
+      return;
+    }
     const loadSelectedTopic = async () => {
+      setQuestionProviderFilter("ALL");
+      setQuestionModelFilter("ALL");
       try {
         await loadTopic(selectedSlug, selectedDifficulty);
       } catch (err: unknown) {
@@ -1748,6 +1762,38 @@ function AdminWorkspace() {
                     placeholder="Search questions and answers"
                   />
                 </label>
+                <label className="question-generation-filter">
+                  <span>AI provider</span>
+                  <select value={questionProviderFilter} onChange={(event) => {
+                    const provider = event.target.value;
+                    setQuestionProviderFilter(provider);
+                    setQuestionModelFilter("ALL");
+                    if (selectedQuestion && !matchesQuestionGeneration(selectedQuestion, provider, "ALL")) {
+                      setSelectedQuestionId(null);
+                      closeQuestionForm();
+                      setIsAiPanelOpen(false);
+                    }
+                  }}>
+                    <option value="ALL">All providers</option>
+                    <option value="NONE">No AI metadata</option>
+                    {questionProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                  </select>
+                </label>
+                <label className="question-generation-filter">
+                  <span>AI model</span>
+                  <select value={questionModelFilter} disabled={questionProviderFilter === "NONE" || !questionModels.length} onChange={(event) => {
+                    const model = event.target.value;
+                    setQuestionModelFilter(model);
+                    if (selectedQuestion && !matchesQuestionGeneration(selectedQuestion, questionProviderFilter, model)) {
+                      setSelectedQuestionId(null);
+                      closeQuestionForm();
+                      setIsAiPanelOpen(false);
+                    }
+                  }}>
+                    <option value="ALL">All models</option>
+                    {questionModels.map((model) => <option key={model} value={model}>{model}</option>)}
+                  </select>
+                </label>
                 <div className="question-status-filter" role="group" aria-label="Filter questions by publishing status">
                   {(["ALL", ...QUESTION_STATUS_OPTIONS.map((status) => status.value)] as const).map((status) => (
                     <button
@@ -1768,6 +1814,11 @@ function AdminWorkspace() {
                   ))}
                 </div>
               </div>
+              {(questionProviderFilter !== "ALL" || questionModelFilter !== "ALL") && (
+                <p className="field-hint" role="status">
+                  {orderedQuestions.filter(matchesQuestionFilters).length} matching questions in this topic and difficulty. Parent questions stay visible for context.
+                </p>
+              )}
               <div id="question-workspace" className={`question-workspace${isQuestionFormOpen ? " editing" : ""}`}>
                 <QuestionTree
                   questions={orderedQuestions}
@@ -1809,7 +1860,7 @@ function AdminWorkspace() {
                   onGenerateDetails={prepareDetailsGeneration}
                 />
                   {!rootQuestions.some(hasVisibleQuestion) && (
-                    <p className="muted">{topic.questions.length ? "No questions match your search and status filter." : "No questions yet. Start with a main question."}</p>
+                    <p className="muted">{topic.questions.length ? "No questions match your filters." : "No questions yet. Start with a main question."}</p>
                   )}
                 {isQuestionFormOpen && (
                   <form className={`question-form${isDetailsGeneration ? " details-mode" : ""}`} id="question-editor" onSubmit={(event) => {
