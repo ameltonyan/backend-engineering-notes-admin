@@ -32,7 +32,9 @@ function ContentLibrary({
   const createContentActionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!createMenuOpen) return;
+    if (!createMenuOpen) {
+      return;
+    }
 
     const closeWhenClickingOutside = (event: PointerEvent) => {
       if (event.target instanceof Node && !createContentActionsRef.current?.contains(event.target)) {
@@ -73,7 +75,7 @@ function ContentLibrary({
             </div>}
           </div>
           {!collapsedCategories[category] && categoryTopics.map((item, topicIndex) => <div className={item.slug === selectedSlug ? "topic-item active" : "topic-item"} key={item.slug}>
-            <button type="button" className="topic-select" title={`Slug: ${item.slug}`} aria-label={`${item.title}. Slug: ${item.slug}`} onClick={() => onSelectTopic(item.slug)}><span className="topic-index" aria-hidden="true">{String(topicIndex + 1).padStart(2, "0")}</span><span className="topic-item-copy"><strong>{item.title}</strong><small>{item.slug}</small></span></button>
+            <button type="button" className="topic-select" title={`Slug: ${item.slug}`} aria-label={`${item.title}. Slug: ${item.slug}${item.publicVisible ? "" : ". Hidden from public site"}`} onClick={() => onSelectTopic(item.slug)}><span className="topic-index" aria-hidden="true">{String(topicIndex + 1).padStart(2, "0")}</span><span className="topic-item-copy"><strong>{item.title}</strong><small>{item.slug}</small>{!item.publicVisible && <span className="topic-visibility-badge">Hidden</span>}</span></button>
             {item.slug === selectedSlug && currentCategory && <div className="topic-order-actions" aria-label={`Change ${item.title} topic order`}>
               <button type="button" aria-label={`Move ${item.title} up`} title="Move topic up" disabled={topicIndex === 0 || loading} onClick={() => onMoveTopic(currentCategory.id, categoryTopics, item.slug, -1)}>↑</button>
               <button type="button" aria-label={`Move ${item.title} down`} title="Move topic down" disabled={topicIndex === categoryTopics.length - 1 || loading} onClick={() => onMoveTopic(currentCategory.id, categoryTopics, item.slug, 1)}>↓</button>

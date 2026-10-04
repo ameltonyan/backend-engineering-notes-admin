@@ -99,6 +99,7 @@ function AdminWorkspace() {
     description: "",
     categoryId: null,
     displayOrder: 0,
+    publicVisible: true,
   });
   const [isTopicFormOpen, setIsTopicFormOpen] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(readDifficulty);
@@ -381,6 +382,7 @@ function AdminWorkspace() {
       description: loaded.description ?? "",
       categoryId: loaded.categoryId,
       displayOrder: loaded.displayOrder,
+      publicVisible: loaded.publicVisible,
     });
     setIsTopicFormOpen(false);
   }, [selectedDifficulty]);
@@ -587,6 +589,7 @@ function AdminWorkspace() {
       description: "",
       categoryId: null,
       displayOrder: topics.length,
+      publicVisible: true,
     });
     setIsTopicFormOpen(true);
   };
@@ -834,12 +837,14 @@ function AdminWorkspace() {
             description: topicForm.description.trim() || null,
             categoryId: topicForm.categoryId,
             displayOrder: topicForm.displayOrder,
+            publicVisible: topicForm.publicVisible,
           }
         : {
             title: topicForm.title.trim(),
             description: topicForm.description.trim() || null,
             categoryId: topicForm.categoryId,
             displayOrder: topicForm.displayOrder,
+            publicVisible: topicForm.publicVisible,
           };
       const result = (await request(
         isNew
@@ -1562,6 +1567,20 @@ function AdminWorkspace() {
                 />
                 <small className="field-hint">A short summary for this topic.</small>
               </label>
+              <div className="topic-visibility-field">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={topicForm.publicVisible}
+                    onChange={(event) => setTopicForm({ ...topicForm, publicVisible: event.target.checked })}
+                    aria-describedby="topic-visibility-hint"
+                  />
+                  Visible on public site
+                </label>
+                <small className="field-hint" id="topic-visibility-hint">
+                  Published questions are still required. Hiding this topic keeps question statuses unchanged.
+                </small>
+              </div>
               <div className="form-actions">
                 {topic && (
                   <button

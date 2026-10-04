@@ -1094,6 +1094,16 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
+.topic-item span.topic-visibility-badge {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font: 600 11px 'DM Sans', sans-serif;
+}
+
 .topic-order-actions {
   display: flex;
   position: absolute;
@@ -1204,6 +1214,12 @@ select:disabled {
 .topic-description-field textarea {
   min-height: 80px;
   resize: both;
+}
+
+.topic-visibility-field {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
 }
 
 .form-actions {
