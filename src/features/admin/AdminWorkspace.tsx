@@ -1061,7 +1061,9 @@ function AdminWorkspace() {
 
   const saveGeneratedQuestions = async (questions: GeneratedQuestionDraft[]) => {
     const questionsToSave = questions.filter((question) => !savedGeneratedQuestionIds[question.draftId]);
-    if (!topic || questionsToSave.length === 0) return;
+    if (!topic || questionsToSave.length === 0) {
+      return;
+    }
     if (questionsToSave.some((question) => !question.question.trim() || !question.answer.trim())) {
       setError("Each generated question needs both a question and an answer before saving.");
       return;
@@ -1094,7 +1096,15 @@ function AdminWorkspace() {
       setSelectedGeneratedIndexes((current) => current.filter((index) =>
         !questionsToSave.some((question) => generatedQuestions[index]?.draftId === question.draftId),
       ));
-      await loadTopic(topic.slug, selectedDifficulty, true);
+      const savedDraftIds = new Set(questionsToSave.map((question) => question.draftId));
+      const hasUnsavedResponses = generatedQuestions.some((question) =>
+        !savedGeneratedQuestionIds[question.draftId] && !savedDraftIds.has(question.draftId),
+      ) || Boolean(mergedQuestion && !savedGeneratedQuestionIds[mergedQuestion.draftId]);
+      if (!hasUnsavedResponses) {
+        discardGeneratedQuestions();
+        setIsAiPanelOpen(false);
+      }
+      await loadTopic(topic.slug, selectedDifficulty, hasUnsavedResponses);
       setNotice(questionsToSave.length + " question" + (questionsToSave.length === 1 ? "" : "s") + " saved");
     } catch (err) {
       setError(getErrorMessage(err));
