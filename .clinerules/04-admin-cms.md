@@ -9,7 +9,7 @@
 ## Purpose
 
 This application is the administration and content-management interface
-for the Backend Engineering Interview Platform.
+for Backend Interview Path.
 
 The admin application manages interview preparation content.
 
