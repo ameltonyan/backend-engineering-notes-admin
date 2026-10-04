@@ -1171,6 +1171,18 @@ select:disabled {
   min-height: 34px;
 }
 
+.topic-visibility-indicator {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.topic-visibility-indicator.visible {
+  background: var(--green);
+}
+
 .topic-form-toggle {
   width: 34px;
   height: 34px;

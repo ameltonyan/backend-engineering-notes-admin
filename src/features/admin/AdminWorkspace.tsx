@@ -1509,6 +1509,14 @@ function AdminWorkspace() {
                       onClick={() => setIsTopicFormOpen((open) => !open)}
                     />
                   )}
+                  {topic && (
+                    <span
+                      className={`topic-visibility-indicator${topic.publicVisible ? " visible" : " hidden"}`}
+                      role="img"
+                      aria-label={topic.publicVisible ? "Public visibility enabled" : "Hidden from public site"}
+                      title={topic.publicVisible ? "Public visibility enabled" : "Hidden from public site"}
+                    />
+                  )}
                   {!isTopicFormOpen && <span>{categories.find((item) => item.id === topicForm.categoryId)?.name ?? topic?.category} · {topicForm.slug}</span>}
                 </div>
               </div>
