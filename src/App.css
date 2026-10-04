@@ -988,6 +988,18 @@ select:disabled {
   border: 0;
 }
 
+.topic-plan-emphasis summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.topic-plan-emphasis summary span {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .focus-options legend {
   width: 100%;
   margin-bottom: 2px;
