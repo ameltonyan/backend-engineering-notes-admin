@@ -167,7 +167,6 @@ function AdminWorkspace() {
   const [topicPlanCategory, setTopicPlanCategory] = useState<Category | null>(null);
   const [topicPlanCategoryName, setTopicPlanCategoryName] = useState("");
   const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
-  const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
   const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([]);
   const [topicPlanTopicCount, setTopicPlanTopicCount] = useState(10);
   const [generatedTopicProposals, setGeneratedTopicProposals] = useState<GeneratedTopicProposal[]>([]);
@@ -626,8 +625,7 @@ function AdminWorkspace() {
 
   const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
-    const categoryName = topicPlanCategoryName.trim();
-    const targetCategoryName = topicPlanCategory?.name ?? categoryName;
+    const categoryName = (topicPlanCategory?.name ?? topicPlanCategoryName).trim();
     if (!categoryName) {
       setError("Enter a category name for the topic plan.");
       return;
@@ -640,12 +638,11 @@ function AdminWorkspace() {
         method: "POST",
         body: JSON.stringify({
           categoryName,
-          targetRole: topicPlanTargetRole.trim(),
           focuses: topicPlanFocuses,
           topicCount: topicPlanTopicCount,
           additionalGuidance: topicPlanGuidance.trim() || null,
           existingTopicTitles: topics
-            .filter((item) => item.category.toLowerCase() === targetCategoryName.toLowerCase())
+            .filter((item) => item.category.toLowerCase() === categoryName.toLowerCase())
             .map((item) => item.title)
             .slice(0, 50),
         }),
@@ -1603,7 +1600,7 @@ function AdminWorkspace() {
                   Visible on public site
                 </label>
                 <small className="field-hint" id="topic-visibility-hint">
-                  Published questions are still required. Hiding this topic keeps question statuses unchanged.
+                  Applies to all difficulties. Readers see this topic only at levels with published questions. Hiding keeps question statuses unchanged.
                 </small>
               </div>
               <div className="form-actions">
@@ -1636,19 +1633,18 @@ function AdminWorkspace() {
               <form className="plan-form" onSubmit={generateTopicPlan}>
                 <label>
                   Category
-                  <input id="topic-plan-category-name" value={topicPlanCategoryName} onChange={(event) => {
+                  <input id="topic-plan-category-name" list="topic-plan-categories" value={topicPlanCategoryName} onChange={(event) => {
                     const categoryName = event.target.value;
                     setTopicPlanCategoryName(categoryName);
-                    if (topicPlanCategory && topicPlanCategory.name.trim().toLowerCase() !== categoryName.trim().toLowerCase()) {
-                      setTopicPlanCategory(null);
-                    }
+                    setTopicPlanCategory(categories.find((category) =>
+                      category.name.trim().toLowerCase() === categoryName.trim().toLowerCase(),
+                    ) ?? null);
                   }} placeholder="e.g. Java" maxLength={100} required />
-                  <small className="field-hint">Topics are generated under this Category. A matching existing Category is reused when you create selected Topics.</small>
-                </label>
-                <label>
-                  Target interview role
-                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Senior Backend Engineer" required />
-                  <small className="field-hint">Sets interview scope and depth while keeping essential foundations. Question difficulty is configured separately.</small>
+                  <datalist id="topic-plan-categories">
+                    {categories.map((category) => <option key={category.id} value={category.name} />)}
+                  </datalist>
+                  <small className="field-hint">Choose an existing category or enter a new name. A new category is created when you save selected topics.</small>
+                  <small className="field-hint">Topics cover shared subjects across all question difficulty levels, from foundations to advanced areas.</small>
                 </label>
                 <label>
                   Topic guidance (optional)
@@ -1659,7 +1655,7 @@ function AdminWorkspace() {
                     onChange={(event) => setTopicPlanGuidance(event.target.value)}
                     placeholder="For Java: cover the major language, collections, concurrency, JVM, testing, and diagnostics areas. Exclude Spring and databases. Specify a Java version if needed."
                   />
-                  <small className="field-hint">Set coverage boundaries, required areas, exclusions, or a technology version. Leave blank for balanced coverage of the category and role.</small>
+                  <small className="field-hint">Set coverage boundaries, required areas, exclusions, or a technology version. Leave blank for balanced coverage across all question difficulty levels.</small>
                 </label>
                 {topicPlanCategoryName.trim() && topics.some((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()) && (
                   <div className="topic-plan-existing">
