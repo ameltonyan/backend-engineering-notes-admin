@@ -4,8 +4,8 @@
 
 This repository is `backend-engineering-notes-admin`.
 
-It is the React/TypeScript administration and CMS application for the
-Backend Engineering Interview Platform.
+It is the React/TypeScript administration and CMS application for
+Backend Interview Path.
 
 The overall system consists of three separate repositories:
 

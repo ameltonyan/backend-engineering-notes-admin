@@ -20,9 +20,9 @@ export default defineConfig([
   globalIgnores(['dist']),
   {
     files: ['**/*.{ts,tsx}'],
-    # Backend Engineering Notes Admin
+    # Backend Interview Path Admin
       // Other configs...
-    Admin editor for the Backend Engineering Notes API. It manages topics and their question/answer content through authenticated `/api/admin/**` endpoints.
+    Admin editor for the Backend Interview Path API. It manages topics and their question/answer content through authenticated `/api/admin/**` endpoints.
       // Remove tseslint.configs.recommended and replace with this
     ## Local development
       // Alternatively, use this for stricter rules

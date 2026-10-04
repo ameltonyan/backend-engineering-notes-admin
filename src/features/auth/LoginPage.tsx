@@ -18,9 +18,9 @@ function LoginPage({ error, onLogin }: Props) {
   return (
     <main className="login-shell">
       <section className="login-panel">
-        <p className="eyebrow">Backend Engineering Notes · Admin</p>
+        <p className="eyebrow">Backend Interview Path · Admin</p>
         <h1>Interview content system</h1>
-        <p className="muted">Sign in to manage the notes published by the public site.</p>
+        <p className="muted">Sign in to manage the interview questions published by the public site.</p>
         <form onSubmit={(event) => void submit(event)}>
           <label>
             Username

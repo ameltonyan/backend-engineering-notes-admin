@@ -1,8 +1,8 @@
-# Backend Engineering Notes Admin — Copilot Instructions
+# Backend Interview Path Admin — Copilot Instructions
 
 ## Repository Role
 
-`backend-engineering-notes-admin` is the administration and content-authoring React application for the Backend Engineering Interview Platform.
+`backend-engineering-notes-admin` is the administration and content-authoring React application for Backend Interview Path.
 
 The other repositories are:
 

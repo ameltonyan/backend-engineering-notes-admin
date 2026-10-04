@@ -1427,7 +1427,7 @@ function AdminWorkspace() {
     <main className="admin-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Backend Engineering Notes</p>
+          <p className="eyebrow">Backend Interview Path</p>
           <h1>Content control room</h1>
         </div>
         <div className="topbar-actions">
