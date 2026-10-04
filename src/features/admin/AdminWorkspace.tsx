@@ -6,6 +6,7 @@ import LoginPage from "../auth/LoginPage";
 import { clearCredentials, readCredentials, saveCredentials } from "../auth/authStorage";
 import ContentLibrary from "../content/ContentLibrary";
 import CategoryCreateDialog from "../content/CategoryCreateDialog";
+import CategoryNameInput from "../content/CategoryNameInput";
 import { getTopic, listTopics, listCategories } from "../content/contentApi";
 import { generateSlug } from "../content/contentUtils";
 import type { GeneratedTopicProposal, Topic, TopicForm, TopicSummary, Question, QuestionForm, QuestionStatus, Category } from "../content/types";
@@ -167,11 +168,7 @@ function AdminWorkspace() {
   const [topicPlanCategory, setTopicPlanCategory] = useState<Category | null>(null);
   const [topicPlanCategoryName, setTopicPlanCategoryName] = useState("");
   const [topicPlanGuidance, setTopicPlanGuidance] = useState("");
-  const [topicPlanTargetRole, setTopicPlanTargetRole] = useState("Senior Backend Engineer");
-  const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([
-    "Core knowledge",
-    "Internals",
-  ]);
+  const [topicPlanFocuses, setTopicPlanFocuses] = useState<string[]>([]);
   const [topicPlanTopicCount, setTopicPlanTopicCount] = useState(10);
   const [generatedTopicProposals, setGeneratedTopicProposals] = useState<GeneratedTopicProposal[]>([]);
   const [selectedTopicProposalIndexes, setSelectedTopicProposalIndexes] = useState<number[]>([]);
@@ -571,7 +568,7 @@ function AdminWorkspace() {
     setIsTopicPlanOpen(true);
     setTopicPlanCategory(category);
     setTopicPlanCategoryName(category.name);
-    setTopicPlanFocuses(["Core knowledge", "Internals"]);
+    setTopicPlanFocuses([]);
     setGeneratedTopicProposals([]);
     setSelectedTopicProposalIndexes([]);
     setError("");
@@ -616,7 +613,7 @@ function AdminWorkspace() {
     setTopic(null);
     setTopicPlanCategoryName("");
     setTopicPlanGuidance("");
-    setTopicPlanFocuses(["Core knowledge", "Internals"]);
+    setTopicPlanFocuses([]);
     setGeneratedTopicProposals([]);
     setSelectedTopicProposalIndexes([]);
     setError("");
@@ -629,14 +626,9 @@ function AdminWorkspace() {
 
   const generateTopicPlan = async (event: FormEvent) => {
     event.preventDefault();
-    const categoryName = topicPlanCategoryName.trim();
-    const targetCategoryName = topicPlanCategory?.name ?? categoryName;
+    const categoryName = (topicPlanCategory?.name ?? topicPlanCategoryName).trim();
     if (!categoryName) {
       setError("Enter a category name for the topic plan.");
-      return;
-    }
-    if (!topicPlanFocuses.length) {
-      setError("Select at least one interview focus.");
       return;
     }
     setError("");
@@ -647,12 +639,11 @@ function AdminWorkspace() {
         method: "POST",
         body: JSON.stringify({
           categoryName,
-          targetRole: topicPlanTargetRole.trim(),
           focuses: topicPlanFocuses,
           topicCount: topicPlanTopicCount,
           additionalGuidance: topicPlanGuidance.trim() || null,
           existingTopicTitles: topics
-            .filter((item) => item.category.toLowerCase() === targetCategoryName.toLowerCase())
+            .filter((item) => item.category.toLowerCase() === categoryName.toLowerCase())
             .map((item) => item.title)
             .slice(0, 50),
         }),
@@ -1610,7 +1601,7 @@ function AdminWorkspace() {
                   Visible on public site
                 </label>
                 <small className="field-hint" id="topic-visibility-hint">
-                  Published questions are still required. Hiding this topic keeps question statuses unchanged.
+                  Applies to all difficulties. Readers see this topic only at levels with published questions. Hiding keeps question statuses unchanged.
                 </small>
               </div>
               <div className="form-actions">
@@ -1641,51 +1632,51 @@ function AdminWorkspace() {
                 </div>
               </div>
               <form className="plan-form" onSubmit={generateTopicPlan}>
-                <label>
-                  Category
-                  <input id="topic-plan-category-name" value={topicPlanCategoryName} onChange={(event) => {
-                    const categoryName = event.target.value;
+                <div className="topic-plan-category-field">
+                  <label htmlFor="topic-plan-category-name">Category</label>
+                  <CategoryNameInput id="topic-plan-category-name" value={topicPlanCategoryName} categories={categories} onChange={(categoryName) => {
                     setTopicPlanCategoryName(categoryName);
-                    if (topicPlanCategory && topicPlanCategory.name.trim().toLowerCase() !== categoryName.trim().toLowerCase()) {
-                      setTopicPlanCategory(null);
-                    }
-                  }} placeholder="e.g. Java" maxLength={100} required />
-                  <small className="field-hint">Topics are generated under this Category. A matching existing Category is reused when you create selected Topics.</small>
-                </label>
-                <label>
-                  Target interview role
-                  <input value={topicPlanTargetRole} onChange={(event) => setTopicPlanTargetRole(event.target.value)} placeholder="e.g. Senior Backend Engineer" required />
-                  <small className="field-hint">Sets the expected interview scope and seniority. Question difficulty is configured separately.</small>
-                </label>
+                    setTopicPlanCategory(categories.find((category) =>
+                      category.name.trim().toLowerCase() === categoryName.trim().toLowerCase(),
+                    ) ?? null);
+                  }} />
+                  <small className="field-hint">Choose an existing category or enter a new name. A new category is created when you save selected topics.</small>
+                  <small className="field-hint">Topics cover shared subjects across all question difficulty levels, from foundations to advanced areas.</small>
+                </div>
                 <label>
                   Topic guidance (optional)
                   <textarea
                     rows={3}
+                    maxLength={2000}
                     value={topicPlanGuidance}
                     onChange={(event) => setTopicPlanGuidance(event.target.value)}
-                    placeholder="Focus on Java Collections. Include List, Set, Map, Queue/Deque, immutable and concurrent collections. Avoid Streams."
+                    placeholder="For Java: cover the major language, collections, concurrency, JVM, testing, and diagnostics areas. Exclude Spring and databases. Specify a Java version if needed."
                   />
-                  <small className="field-hint">Describe topics to include, exclude, emphasize, or organize. Leave blank to let AI choose based on the Category and target role.</small>
+                  <small className="field-hint">Set coverage boundaries, required areas, exclusions, or a technology version. Leave blank for balanced coverage across all question difficulty levels.</small>
                 </label>
                 {topicPlanCategoryName.trim() && topics.some((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()) && (
                   <div className="topic-plan-existing">
-                    <span className="field-label">Existing topics excluded from suggestions</span>
+                    <span className="field-label">Existing topics used to avoid overlap</span>
                     <p>{topics.filter((item) => item.category.toLowerCase() === (topicPlanCategory?.name ?? topicPlanCategoryName.trim()).toLowerCase()).map((item) => item.title).join(" · ")}</p>
                   </div>
                 )}
-                <fieldset className="focus-options">
-                  <legend>Interview focus</legend>
-                  {["Core knowledge", "Internals", "Performance", "Production scenarios", "Troubleshooting"].map((focus) => (
-                    <label key={focus}>
-                      <input
-                        type="checkbox"
-                        checked={topicPlanFocuses.includes(focus)}
-                        onChange={() => setTopicPlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
-                      />
-                      {focus}
-                    </label>
-                  ))}
-                </fieldset>
+                <details className="topic-plan-emphasis">
+                  <summary>Optional emphasis <span>{topicPlanFocuses.length ? `${topicPlanFocuses.length} selected` : "Balanced coverage"}</span></summary>
+                  <p className="field-hint">Select angles to emphasize. Essential areas remain included; leave all unchecked for balanced coverage.</p>
+                  <fieldset className="focus-options">
+                    <legend>Emphasize</legend>
+                    {["Core knowledge", "Internals", "Performance", "Production scenarios", "Troubleshooting"].map((focus) => (
+                      <label key={focus}>
+                        <input
+                          type="checkbox"
+                          checked={topicPlanFocuses.includes(focus)}
+                          onChange={() => setTopicPlanFocuses((current) => current.includes(focus) ? current.filter((item) => item !== focus) : [...current, focus])}
+                        />
+                        {focus}
+                      </label>
+                    ))}
+                  </fieldset>
+                </details>
                 <label>
                   Number of topics
                   <input
@@ -1697,7 +1688,7 @@ function AdminWorkspace() {
                     onChange={(event) => setTopicPlanTopicCount(Number(event.target.value))}
                     required
                   />
-                  <small className="field-hint">Choose between 1 and 15 topics.</small>
+                  <small className="field-hint">Choose 1–15 topics. Use 10–15 for a broad outline, or fewer for a focused scope. A short outline is not an exhaustive curriculum.</small>
                 </label>
                 <div className="actions question-form-actions">
                     <button className="primary" type="submit" disabled={isAiBusy}>{topicPlanLoading ? "Generating topics..." : "Generate topics with AI"}</button>
