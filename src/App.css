@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
   --ink: #17221f;
@@ -2592,4 +2592,754 @@ button:disabled {
 .ai-alternatives-toggle {
   min-height: 36px;
   margin-top: 8px;
+}
+
+/* Administrative visual override: preserve the workspace layout while giving it
+   a quieter, denser operational surface. */
+:root {
+  --ink: #20252d;
+  --muted: #667085;
+  --paper: #f7f7f5;
+  --panel: #ffffff;
+  --line: #deded8;
+  --green: #b45309;
+  --green-dark: #92400e;
+  --blue: #2563eb;
+  --red: #c2414c;
+  --soft: #f0f0eb;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --success-line: #a7d8b1;
+}
+
+body {
+  background: #f7f7f5;
+  color: var(--ink);
+}
+
+button,
+input,
+textarea,
+select,
+.question-status-option,
+.detail-generation-options label,
+.question-status-filter-option,
+.question-status-badge,
+.inline-tags span,
+.saved-generated-question,
+.answer-improvement-count {
+  border-radius: 4px;
+}
+
+button {
+  min-height: 36px;
+  font-weight: 600;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+
+input,
+textarea,
+select {
+  background: #fff;
+  box-shadow: inset 0 1px 1px rgba(15, 23, 42, .03);
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid rgba(180, 83, 9, .28);
+  outline-offset: 1px;
+  border-color: var(--green);
+}
+
+.primary,
+.back-to-top {
+  background: var(--green);
+  border-color: var(--green);
+  box-shadow: none;
+}
+
+.primary:hover,
+.back-to-top:hover {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+}
+
+.manual-action,
+.compact-action {
+  border-color: #e5c797;
+  color: var(--green-dark);
+}
+
+.manual-action:hover,
+.compact-action:hover,
+.create-content-menu button:hover {
+  border-color: #d9ad68;
+  background: #fff8eb;
+  color: var(--green-dark);
+}
+
+.status-banner,
+.login-panel,
+.confirm-modal,
+.ai-loading-card,
+.ai-settings-popover,
+.create-content-menu,
+.plan-editor,
+.question-inspector,
+.ai-assist,
+.question-form,
+.selected-question-card {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .07);
+}
+
+.status-banner {
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
+}
+
+.notice,
+.notice-banner,
+.ai-settings-gear,
+.topic-category-title,
+.topic-form-toggle,
+.question-order-progress,
+.tree-branch,
+.question-chevron,
+.answer-disclosure,
+.answer-improvement-status,
+.question-count-control button,
+.ai-settings-links a {
+  color: var(--green-dark);
+}
+
+.notice-banner,
+.plan-editor,
+.hierarchy-guide,
+.details-generation-prompt,
+.ai-assist,
+.generated-question-improving,
+.inline-answer,
+.question-form {
+  border-color: #ead1a8;
+  background: #fffaf1;
+}
+
+.ai-loading-overlay,
+.modal-backdrop {
+  background: rgba(15, 23, 42, .48);
+}
+
+.ai-loading-card,
+.confirm-modal,
+.login-panel,
+.ai-settings-popover {
+  border-color: var(--line);
+}
+
+.ai-loading-mark span,
+.ai-loading-track span {
+  background: var(--green);
+}
+
+.ai-loading-track {
+  background: #f4e3c7;
+}
+
+.topic-item.active,
+.merged-question,
+.selected-question-card,
+.question-inspector {
+  border-color: var(--green);
+  box-shadow: 0 5px 16px rgba(37, 99, 235, .12);
+}
+
+.topic-item.active {
+  background: #fffaf1;
+}
+
+.tree-node.moving > .tree-node-row,
+.tree-node-toggle:hover,
+.tree-node.selected > .tree-node-row > .tree-node-toggle,
+.tree-node.drop-target > .tree-node-row > .tree-node-toggle,
+.detail-generation-options label.selected {
+  background: #fff8eb;
+}
+
+.tree-node.selected > .tree-node-row {
+  filter: drop-shadow(0 5px 8px rgba(180, 83, 9, .12));
+}
+
+.question-number {
+  border-color: #e5c797;
+  border-radius: 4px;
+  background: #fff8eb;
+  color: var(--green-dark);
+}
+
+.question-status-option.selected:has(input[value="PUBLISHED"]),
+.question-status-filter-option.selected.status-published,
+.question-status-badge.status-published {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.question-status-indicator.status-published,
+.topic-visibility-indicator.visible {
+  background: var(--success);
+}
+
+.inline-answer,
+.hierarchy-guide,
+.ai-edit-context {
+  border-left-color: var(--green);
+}
+
+.generated-bulk-actions {
+  border-color: #e0bb80;
+  background: #fff8eb;
+}
+
+.generated-question-saved,
+.saved-generated-question {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.answer-improvement-count,
+.answer-improvement-spinner,
+.ai-settings-spinner {
+  border-color: #e5c797;
+}
+
+.answer-improvement-spinner,
+.ai-settings-spinner {
+  border-top-color: var(--green);
+}
+
+.question-toggle:hover {
+  background: #f8fafc;
+}
+
+.question-status-filter-option,
+.question-status-badge,
+.detail-generation-options label,
+.inline-tags span {
+  border-radius: 4px;
+}
+
+/* Content studio redesign. The hierarchy and interaction model stay intact;
+   these rules make the existing authoring workflows easier to scan and operate. */
+:root {
+  --ink: #182235;
+  --muted: #667085;
+  --paper: #f4f6fa;
+  --panel: #ffffff;
+  --line: #dfe5ee;
+  --green: #2858c4;
+  --green-dark: #1e4294;
+  --blue: #2858c4;
+  --red: #bd3442;
+  --soft: #eef2f7;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --success-line: #9bd5ad;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+body {
+  background-color: var(--paper);
+  background-image: linear-gradient(rgba(24, 34, 53, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(24, 34, 53, .025) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.eyebrow,
+.provider-selector,
+.list-count,
+.category-count,
+.topic-category-title,
+.tree-meta,
+.candidate-meta,
+.inspector-meta,
+.question-status-badge,
+.question-status-filter-option span,
+.topic-index,
+.saved-generated-question,
+.answer-improvement-count {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.admin-shell {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.topbar {
+  min-height: 80px;
+  padding: 16px clamp(20px, 3vw, 48px);
+  border: 0;
+  background: #182235;
+  color: #f8fafc;
+}
+
+.topbar .eyebrow {
+  margin-bottom: 4px;
+  color: #aebed8;
+}
+
+.topbar h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.topbar-actions {
+  gap: 10px;
+}
+
+.topbar .provider-selector {
+  min-width: 210px;
+  color: #aebed8;
+}
+
+.topbar .provider-selector select,
+.topbar-actions > button {
+  min-height: 38px;
+  border-color: #40516d;
+  background: #243149;
+  color: #f8fafc;
+}
+
+.topbar .provider-selector select:focus,
+.topbar-actions > button:focus-visible {
+  border-color: #87a7ff;
+  outline-color: rgba(135, 167, 255, .45);
+}
+
+.topbar-actions > button:hover:not(:disabled) {
+  border-color: #6f88b8;
+  background: #2d3d59;
+}
+
+.workspace {
+  grid-template-columns: 316px minmax(0, 1fr);
+  gap: 0;
+  min-height: calc(100vh - 80px);
+  margin-top: 0;
+}
+
+.topic-list {
+  padding: 24px 16px;
+  border-right: 1px solid var(--line);
+  background: #fff;
+}
+
+@media (min-width: 851px) {
+  .topic-list {
+    top: 0;
+    max-height: calc(100dvh - 80px);
+    padding-right: 16px;
+  }
+}
+
+.list-heading {
+  gap: 14px;
+}
+
+.content-list-title {
+  align-items: center;
+}
+
+.list-heading h2 {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.list-count {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #eef2f7;
+  color: #56657d;
+}
+
+.create-content-actions > button {
+  width: 100%;
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.create-content-actions > button:hover:not(:disabled) {
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+}
+
+.create-content-menu {
+  z-index: 12;
+  width: 272px;
+  padding: 6px;
+  border-radius: 6px;
+  border-color: var(--line);
+  box-shadow: 0 14px 32px rgba(24, 34, 53, .16);
+}
+
+.create-content-menu button {
+  min-height: 0;
+  border-radius: 4px;
+}
+
+.search-field {
+  margin-top: 26px;
+  color: #48566e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.search-field input {
+  min-height: 38px;
+  margin-top: 4px;
+  border-radius: 5px;
+  background: #f8fafc;
+}
+
+.topic-category-group {
+  margin-top: 22px;
+}
+
+.topic-category-title {
+  color: #52637f;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .06em;
+}
+
+.topic-item {
+  margin-top: 4px;
+  border-radius: 5px;
+}
+
+.topic-item + .topic-item::before {
+  display: none;
+}
+
+.topic-select {
+  padding: 11px 74px 11px 12px;
+}
+
+.topic-item:hover {
+  background: #f5f8fd;
+}
+
+.topic-item.active {
+  border-color: #b5c9f6;
+  background: #edf3ff;
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.topic-item.active .topic-select {
+  color: #173b89;
+}
+
+.topic-index {
+  background: #edf3ff;
+}
+
+.editor {
+  padding: 32px clamp(22px, 4vw, 64px) 72px;
+  background-color: #f6f8fb;
+}
+
+.editor > * {
+  max-width: 1240px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.editor-heading {
+  padding: 2px 0 20px;
+  border-bottom-color: #cfd8e6;
+}
+
+.editor-heading h2 {
+  color: var(--ink);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+}
+
+.topic-form,
+.question-form,
+.plan-editor,
+.question-inspector,
+.ai-assist,
+.generated-question,
+.plan-proposal {
+  border-color: var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(24, 34, 53, .055);
+}
+
+.topic-form {
+  margin-top: 18px;
+  padding: 24px;
+}
+
+.topic-form-heading {
+  margin-top: 22px;
+}
+
+.topic-form-summary {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+}
+
+.topic-form-toggle {
+  color: var(--green-dark);
+}
+
+.interview-heading {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.interview-heading h3 {
+  color: var(--ink);
+  font-size: 19px;
+}
+
+.question-actions .primary,
+.primary {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled),
+.question-actions .primary:hover:not(:disabled) {
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+}
+
+.manual-action,
+.compact-action {
+  border-color: #bdcdf1;
+  background: #f5f8ff;
+  color: var(--green-dark);
+}
+
+.manual-action:hover:not(:disabled),
+.compact-action:hover:not(:disabled) {
+  border-color: #8facdf;
+  background: #eaf0ff;
+}
+
+.question-filter-bar {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.question-status-filter-option {
+  min-height: 32px;
+  padding: 5px 8px;
+  background: #fff;
+}
+
+.question-status-filter-option.selected.status-all {
+  border-color: #aebbd0;
+  background: #f0f3f7;
+}
+
+.question-status-option.selected:has(input[value="PUBLISHED"]),
+.question-status-filter-option.selected.status-published,
+.question-status-badge.status-published {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.question-status-indicator.status-published,
+.topic-visibility-indicator.visible {
+  background: var(--success);
+}
+
+.question-tree {
+  margin-top: 16px;
+  padding: 14px 0 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.tree-node-toggle {
+  min-height: 44px;
+  border-radius: 5px;
+}
+
+.tree-node-toggle:hover,
+.tree-node.selected > .tree-node-row > .tree-node-toggle {
+  border-color: #b5c9f6;
+  background: #f1f5ff;
+}
+
+.tree-node.selected > .tree-node-row {
+  filter: none;
+}
+
+.question-number {
+  border-color: #bdcdf1;
+  background: #f1f5ff;
+  color: var(--green-dark);
+}
+
+.selected-question-card {
+  border-color: #b5c9f6;
+  background: #f8faff;
+  box-shadow: none;
+}
+
+.question-form,
+.plan-editor,
+.ai-assist {
+  margin-top: 22px;
+}
+
+.question-form {
+  margin-left: 27px;
+  padding: 24px;
+}
+
+.ai-assist,
+.plan-editor {
+  border-color: #cbd8f4;
+  background: #f8faff;
+  box-shadow: none;
+}
+
+.ai-assist-open {
+  background: #fff;
+}
+
+.generated-bulk-actions {
+  border-color: #bdcdf1;
+  background: #f1f5ff;
+}
+
+.generated-question-improving {
+  border-color: #aebee7;
+  background: #f6f8ff;
+}
+
+.generated-question-saved,
+.saved-generated-question {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.details-generation-prompt,
+.hierarchy-guide,
+.inline-answer,
+.ai-edit-context {
+  border-color: #cbd8f4;
+  border-left-color: var(--green);
+  background: #f4f7ff;
+}
+
+.status-banner {
+  border-radius: 6px;
+  box-shadow: 0 5px 16px rgba(24, 34, 53, .07);
+}
+
+.notice-banner {
+  border-color: var(--success-line);
+  background: var(--success-soft);
+  color: #166534;
+}
+
+.login-shell {
+  background-color: #182235;
+  background-image: linear-gradient(rgba(174, 190, 216, .07) 1px, transparent 1px), linear-gradient(90deg, rgba(174, 190, 216, .07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.login-panel {
+  border-radius: 8px;
+  border-color: #dbe3ef;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, .22);
+}
+
+.login-panel h1 {
+  color: var(--ink);
+  font-size: 30px;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid rgba(40, 88, 196, .32);
+  outline-offset: 1px;
+  border-color: var(--green);
+}
+
+@media (max-width: 850px) {
+  .workspace {
+    min-height: auto;
+  }
+
+  .topic-list {
+    padding: 20px;
+  }
+
+  .editor {
+    padding: 28px 20px 52px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    align-items: flex-start;
+    padding: 18px 16px;
+  }
+
+  .topbar h1 {
+    font-size: 21px;
+  }
+
+  .topbar-actions,
+  .topbar .provider-selector {
+    width: 100%;
+  }
+
+  .question-form {
+    margin-left: 0;
+  }
 }
