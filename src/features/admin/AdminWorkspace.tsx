@@ -1427,8 +1427,8 @@ function AdminWorkspace() {
     <main className="admin-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Backend Interview Path</p>
-          <h1>Content control room</h1>
+          <p className="eyebrow">Backend Interview Path / Admin</p>
+          <h1>Content studio</h1>
         </div>
         <div className="topbar-actions">
           <AiProviderSelector
